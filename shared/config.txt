@@ -1,0 +1,13 @@
+# Configuration file example
+
+[Server]
+host = 127.0.0.1
+port = 8080
+max_connections = 10
+
+[Client]
+timeout = 300
+retry = 3
+
+[Files]
+buffer_size = 4096

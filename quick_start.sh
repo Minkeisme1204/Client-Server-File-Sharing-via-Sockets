@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# Quick Start Script
+# Chạy script này để test nhanh hệ thống
+
+echo "╔═══════════════════════════════════════════════════════════╗"
+echo "║        FILE TRANSFER SYSTEM - QUICK START GUIDE           ║"
+echo "╚═══════════════════════════════════════════════════════════╝"
+echo ""
+echo "Hướng dẫn chạy:"
+echo ""
+echo "1️⃣  Mở Terminal 1 và chạy Server:"
+echo "   cd /home/minkeisrtx5090/Desktop/Workplace/HUST/06_Computer_Network/Client-Server-File-Sharing-via-Sockets"
+echo "   ./build/server_test"
+echo ""
+echo "2️⃣  Mở Terminal 2 và chạy Client:"
+echo "   cd /home/minkeisrtx5090/Desktop/Workplace/HUST/06_Computer_Network/Client-Server-File-Sharing-via-Sockets"
+echo "   ./build/client_test 127.0.0.1 8080"
+echo ""
+echo "3️⃣  Trong Client terminal, thử các lệnh:"
+echo "   → list                    # Xem danh sách file"
+echo "   → get test_file.txt       # Download file"
+echo "   → put <your_file>         # Upload file"
+echo "   → metrics                 # Xem thống kê"
+echo "   → help                    # Xem thêm lệnh"
+echo ""
+echo "📁 File test mẫu đã có sẵn trong thư mục 'shared/':"
+ls -1 shared/
+echo ""
+echo "✨ Các tính năng chính:"
+echo "   ✓ Upload/Download file"
+echo "   ✓ List files trên server"
+echo "   ✓ Metrics và statistics"
+echo "   ✓ Multi-client support"
+echo "   ✓ Giao diện terminal thân thiện"
+echo ""
+echo "📖 Xem thêm chi tiết trong TEST_USAGE.md"
+echo ""

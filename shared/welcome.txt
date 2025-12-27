@@ -1,0 +1,12 @@
+Welcome to the File Transfer System!
+=============================================
+
+This is another sample file for testing.
+You can transfer any type of text file between client and server.
+
+Sample Data:
+- Line 1
+- Line 2  
+- Line 3
+
+Have a great day!
