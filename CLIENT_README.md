@@ -19,7 +19,7 @@ A professional, well-architected C++ client library for file transfer operations
 - ✅ **Chunked Transfer** - Configurable chunk size for optimal performance
 
 ### Architecture Highlights
-- 🏗️ **Interface-Based Design** - `IClient` interface for flexibility
+- 🏗️ **Modular Design** - Clean separation of concerns with layered architecture
 - 📦 **Modular Components** - Separated socket, protocol, and metrics layers
 - 🎯 **SOLID Principles** - Clean, maintainable, testable code
 - 🔧 **Configurable** - Chunk size, verbose mode, callbacks
@@ -31,7 +31,7 @@ A professional, well-architected C++ client library for file transfer operations
 ```
 Client-Server-File-Sharing-via-Sockets/
 ├── include /FilesTransfer/Client/
-│   ├── IClient.h                    # Client interface
+│   ├── Client.h                    # Client interface
 │   ├── Client.h                     # Client implementation header
 │   ├── metrics.h                    # Metrics system
 │   └── core/
@@ -102,7 +102,7 @@ int main() {
 |----------|-------------|
 | [QUICKSTART.md](QUICKSTART.md) | Step-by-step guide for getting started |
 | [DESIGN.md](DESIGN.md) | Detailed architecture and design decisions |
-| [IClient.h](include%20/FilesTransfer/Client/IClient.h) | Interface API reference |
+| [client.h](include/client.h) | Client API reference |
 | [Client.h](include%20/FilesTransfer/Client/Client.h) | Implementation API reference |
 
 ## 🎯 Use Cases
@@ -124,7 +124,7 @@ client->uploadFile(filepath);
 ### Automated Testing
 Use the interface for easy mocking and testing:
 ```cpp
-class MockClient : public IClient {
+class MockClient : public Client {
     // Implement for testing
 };
 ```
@@ -184,7 +184,7 @@ std::cout << client->getMetricsSummary();
 
 ```
 ┌─────────────────────────────────────────┐
-│          IClient (Interface)            │
+│          Client (Interface)            │
 │   - Defines contract                    │
 └──────────────┬──────────────────────────┘
                │ implements
@@ -203,7 +203,7 @@ std::cout << client->getMetricsSummary();
 
 ## 🔒 Design Principles
 
-1. **Interface Segregation** - Clean contract with IClient
+1. **Interface Segregation** - Clean contract with Client
 2. **Dependency Injection** - Components injected via constructors
 3. **Single Responsibility** - Each class has one clear purpose
 4. **Open/Closed** - Open for extension, closed for modification
@@ -215,7 +215,7 @@ The interface-based design enables easy testing:
 
 ```cpp
 // Create mock for testing
-class MockClient : public IClient {
+class MockClient : public Client {
     bool connect(const std::string& ip, uint16_t port) override {
         // Mock implementation
         return true;
@@ -224,7 +224,7 @@ class MockClient : public IClient {
 };
 
 // Use in tests
-std::unique_ptr<IClient> client = std::make_unique<MockClient>();
+std::unique_ptr<Client> client = std::make_unique<MockClient>();
 // Test your code with the mock
 ```
 

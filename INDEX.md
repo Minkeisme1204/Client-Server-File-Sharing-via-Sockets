@@ -141,7 +141,7 @@ Welcome to the complete File Transfer Client documentation! This index will help
 
 ### Header Files (API)
 
-#### [IClient.h](../include%20/FilesTransfer/Client/IClient.h) 🔌
+#### [Client.h](../include%20/FilesTransfer/Client/Client.h) 🔌
 **Interface Definition**
 - Pure virtual interface
 - Contract for all implementations
@@ -149,7 +149,7 @@ Welcome to the complete File Transfer Client documentation! This index will help
 - Well documented with comments
 
 **Key Classes:**
-- `IClient` - Abstract interface
+- `Client` - Abstract interface
 
 ---
 
@@ -278,7 +278,7 @@ make -f Makefile_new run
 → See **[CLIENT_README.md](CLIENT_README.md)** § Configuration
 
 #### Understand the API
-→ Read **[IClient.h](../include%20/FilesTransfer/Client/IClient.h)** + **[Client.h](../include%20/FilesTransfer/Client/Client.h)**
+→ Read **[Client.h](../include%20/FilesTransfer/Client/Client.h)** + **[Client.h](../include%20/FilesTransfer/Client/Client.h)**
 
 #### Extend the functionality
 → Read **[DESIGN.md](DESIGN.md)** § Future Enhancements
@@ -335,11 +335,11 @@ make -f Makefile_new run
 #### **Architecture & Design**
 - DESIGN.md
 - ARCHITECTURE_DIAGRAMS.md
-- IClient.h (interface)
+- Client.h (interface)
 - Client.h (implementation)
 
 #### **API Reference**
-- IClient.h (interface methods)
+- Client.h (interface methods)
 - Client.h (concrete methods)
 - metrics.h (metrics API)
 - CLIENT_README.md (usage examples)

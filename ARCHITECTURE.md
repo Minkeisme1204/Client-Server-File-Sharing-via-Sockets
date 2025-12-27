@@ -463,13 +463,13 @@ After `make install`:
 
 ### 1. Interface-Based Design
 ```cpp
-class IClient {          // Abstract interface
+class Client {          // Abstract interface
     virtual bool connect(...) = 0;
     virtual bool uploadFile(...) = 0;
     // ...
 };
 
-class Client : public IClient {  // Concrete implementation
+class Client : public Client {  // Concrete implementation
     // Implementation details
 };
 ```

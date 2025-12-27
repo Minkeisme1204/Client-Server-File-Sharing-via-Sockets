@@ -8,35 +8,22 @@ I have designed and implemented a **professional, production-ready File Transfer
 
 ### 1. Header Files (Interface Layer)
 
-#### **IClient.h** - Abstract Interface
-- Defines the contract for all client implementations
-- Pure virtual methods for all operations
-- Enables polymorphism and dependency injection
-- Perfect for testing with mock implementations
+#### **client.h** - Client Class Header
+- Main client class for all file transfer operations
+- High-level API for connect, upload, download, list
+- Manages socket, protocol, and metrics components
+- Configuration methods (timeout, verbose mode)
 
 **Key Methods:**
 ```cpp
-virtual bool connect(const std::string& ip, uint16_t port) = 0;
-virtual bool uploadFile(const std::string& filepath) = 0;
-virtual bool downloadFile(const std::string& filename, const std::string& saveDir) = 0;
-virtual std::vector<std::string> listFiles() = 0;
-virtual TransferMetrics getTransferMetrics() const = 0;
+bool connect(const std::string& ip, uint16_t port);
+bool listFiles();
+bool getFile(const std::string& filename, const std::string& saveDir);
+bool putFile(const std::string& filepath);
+const ClientMetrics& getMetrics() const;
 ```
 
-#### **Client.h** - Concrete Implementation
-- Implements IClient interface
-- Orchestrates all file transfer operations
-- Manages socket, protocol, and metrics components
-- Provides additional utility methods
-
-**Features:**
-- Configurable chunk size
-- Verbose logging mode
-- Progress callbacks
-- Error callbacks
-- Comprehensive metrics
-
-#### **metrics.h** - Performance Tracking
+#### **client_metrics.h** - Performance Tracking
 - Transfer metrics (speed, progress, ETA)
 - Connection metrics (packets, bytes, RTT)
 - Formatted output helpers
@@ -136,7 +123,7 @@ virtual TransferMetrics getTransferMetrics() const = 0;
 
 ```
 ┌─────────────────────────────────────────┐
-│       IClient (Abstract Interface)      │
+│       Client (Abstract Interface)      │
 │  Pure virtual methods defining contract │
 └──────────────┬──────────────────────────┘
                │ implements
@@ -159,7 +146,7 @@ virtual TransferMetrics getTransferMetrics() const = 0;
 ## ✨ Key Features Implemented
 
 ### 1. Interface-Based Design
-- **IClient** abstract interface
+- **Client** abstract interface
 - Enables polymorphism
 - Easy to mock for testing
 - Supports multiple implementations
@@ -355,7 +342,7 @@ std::cout << client->getMetricsSummary() << std::endl;
 ## 📝 Files Created
 
 ### Headers (include /FilesTransfer/Client/)
-- `IClient.h` - Interface definition
+- `Client.h` - Interface definition
 - `Client.h` - Client implementation header
 - `metrics.h` - Updated metrics system
 

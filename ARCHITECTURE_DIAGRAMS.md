@@ -11,7 +11,7 @@
                           │ uses
                           ▼
 ┌───────────────────────────────────────────────────────────────┐
-│                      IClient Interface                         │
+│                      Client Interface                         │
 │  ┌─────────────────────────────────────────────────────────┐ │
 │  │  + connect(ip, port): bool                              │ │
 │  │  + uploadFile(path): bool                               │ │
@@ -190,7 +190,7 @@
 ```
 ┌─────────────────────────────────────┐
 │          <<interface>>              │
-│             IClient                 │
+│             Client                 │
 ├─────────────────────────────────────┤
 │ + connect(string, uint16_t): bool  │
 │ + disconnect(): void                │

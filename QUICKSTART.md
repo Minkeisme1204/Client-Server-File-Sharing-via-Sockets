@@ -388,7 +388,7 @@ make -f Makefile_new debug
 ```
 Client-Server-File-Sharing-via-Sockets/
 ├── include /FilesTransfer/Client/
-│   ├── IClient.h          # Interface definition
+│   ├── Client.h          # Interface definition
 │   ├── Client.h           # Client implementation
 │   ├── metrics.h          # Metrics system
 │   └── core/

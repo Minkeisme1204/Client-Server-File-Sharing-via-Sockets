@@ -6,18 +6,12 @@ A modern, well-structured C++ client library for file transfer operations using 
 
 ## 🏗️ Architecture
 
-### Design Pattern: Interface Segregation & Dependency Injection
+### Design Pattern: Layered Architecture
 
 ```
 ┌──────────────────────────────────────────────┐
-│            IClient (Interface)               │
-│  - Defines contract for all client ops      │
-└─────────────────┬────────────────────────────┘
-                  │ implements
-                  ▼
-┌──────────────────────────────────────────────┐
 │              Client (Concrete)               │
-│  - Implements IClient interface              │
+│     High-level file transfer API             │
 │  - Orchestrates all operations               │
 └──────┬───────────┬───────────┬───────────────┘
        │           │           │
@@ -31,35 +25,25 @@ A modern, well-structured C++ client library for file transfer operations using 
 
 ## 📦 Components
 
-### 1. IClient Interface (`IClient.h`)
+### 1. Client Implementation (`Client.h` / `Client.cpp`)
 
-**Purpose**: Define the contract for all client implementations
+**Purpose**: High-level client API for file transfer operations
 
 **Key Methods**:
 - Connection: `connect()`, `disconnect()`, `isConnected()`
-- File Operations: `uploadFile()`, `downloadFile()`, `listFiles()`, `deleteFile()`
-- Metrics: `getTransferMetrics()`, `getConnectionMetrics()`
-- Callbacks: `setProgressCallback()`, `setErrorCallback()`
-
-**Benefits**:
-- Allows multiple implementations (mock, test, production)
-- Enables dependency injection for testing
-- Clear contract for client behavior
-- Supports polymorphism
-
-### 2. Client Implementation (`Client.h` / `Client.cpp`)
-
-**Purpose**: Concrete implementation of IClient
+- File Operations: `listFiles()`, `getFile()`, `putFile()`
+- Metrics: `getMetrics()`, `displayMetrics()`, `exportMetrics()`
+- Configuration: `setTimeout()`, `setVerbose()`
 
 **Components**:
 ```cpp
-class Client : public IClient {
+class Client {
 private:
     std::unique_ptr<ClientSocket> socket_;
     std::unique_ptr<ClientProtocol> protocol_;
-    std::unique_ptr<MetricsCollector> metricsCollector_;
-    std::unique_ptr<ClientMetrics> coreMetrics_;
-    // ... configuration and state
+    ClientMetrics metrics_;
+    int timeout_;
+    bool verbose_;
 };
 ```
 
@@ -237,7 +221,7 @@ client->setErrorCallback([](const std::string& error) {
 
 ### Unit Tests
 - Test each component in isolation
-- Mock dependencies using IClient interface
+- Mock dependencies using Client interface
 - Test error conditions
 
 ### Integration Tests
@@ -247,7 +231,7 @@ client->setErrorCallback([](const std::string& error) {
 
 ### Example Mock:
 ```cpp
-class MockClient : public IClient {
+class MockClient : public Client {
     // Implement interface for testing
 };
 ```
@@ -352,7 +336,7 @@ if (!client->uploadFile("file.txt")) {
 ## 📝 API Reference
 
 See individual header files for detailed API documentation:
-- [IClient.h](../include%20/FilesTransfer/Client/IClient.h) - Interface definition
+- [Client.h](../include%20/FilesTransfer/Client/Client.h) - Interface definition
 - [Client.h](../include%20/FilesTransfer/Client/Client.h) - Client implementation
 - [metrics.h](../include%20/FilesTransfer/Client/metrics.h) - Metrics system
 

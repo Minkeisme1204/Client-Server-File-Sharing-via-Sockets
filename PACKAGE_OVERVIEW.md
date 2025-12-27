@@ -64,7 +64,7 @@ FileTransferCore (Shared Library v1.0.0)
 
 | Location | Files | Purpose |
 |----------|-------|---------|
-| **include/core/Client/** | IClient.h, Client.h, client_*.h | Client interface and implementation |
+| **include/core/Client/** | Client.h, Client.h, client_*.h | Client interface and implementation |
 | **include/core/Server/** | socket.h, protocol.h, metrics.h, client_session.h | Server components |
 | **include/utils/** | Various utility headers | Shared utilities |
 
@@ -157,7 +157,7 @@ Client-Server-File-Sharing-via-Sockets/
 ├── include/                      Public headers
 │   ├── core/
 │   │   ├── Client/
-│   │   │   ├── IClient.h          Interface definition
+│   │   │   ├── Client.h          Interface definition
 │   │   │   ├── Client.h           Implementation header
 │   │   │   ├── client_socket.h    Socket operations
 │   │   │   ├── client_protocol.h  Protocol handling
@@ -267,7 +267,7 @@ target_link_libraries(MyApp PRIVATE FileTransfer::FileTransferCore)
 
 ```cpp
 // Abstract interface
-class IClient {
+class Client {
     virtual bool connect(const string& ip, uint16_t port) = 0;
     virtual bool uploadFile(const string& filepath) = 0;
     virtual bool downloadFile(const string& filename, 
@@ -278,7 +278,7 @@ class IClient {
 };
 
 // Concrete implementation
-class Client : public IClient {
+class Client : public Client {
     // Full implementation with ClientSocket, ClientProtocol, ClientMetrics
 };
 ```
@@ -398,7 +398,7 @@ int main() {
 
 ### Architecture Patterns
 
-1. **Interface Segregation Principle** - `IClient` interface
+1. **Interface Segregation Principle** - `Client` interface
 2. **Component-based Design** - Socket, Protocol, Metrics separation
 3. **RAII** - Automatic resource management
 4. **Strategy Pattern** - Configurable behavior (chunk size, callbacks)
@@ -490,7 +490,7 @@ myapp: main.cpp
 
 ```cpp
 // Mock interface for testing
-class MockClient : public IClient {
+class MockClient : public Client {
     MOCK_METHOD(bool, connect, (const string&, uint16_t), (override));
     MOCK_METHOD(bool, uploadFile, (const string&), (override));
     // ...
@@ -731,7 +731,7 @@ This implementation teaches:
 ## 🔍 Code Statistics
 
 ### Complexity
-- **Classes:** 3 main (IClient, Client, MetricsCollector)
+- **Classes:** 3 main (Client, Client, MetricsCollector)
 - **Methods:** ~40 public methods
 - **Helper Functions:** ~15 private methods
 - **Callback Types:** 2 (progress, error)
