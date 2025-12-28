@@ -112,13 +112,21 @@ ssize_t ServerSocket::sendData(int fd, const uint8_t* data, size_t size) {
 
     size_t totalSent = 0;
     while (totalSent < size) {
-        ssize_t sent = send(fd, data + totalSent, size - totalSent, 0);
+        ssize_t sent = send(fd, data + totalSent, size - totalSent, MSG_NOSIGNAL);
         if (sent < 0) {
+            if (errno == EINTR) {
+                continue; // Interrupted, retry
+            }
+            if (errno == EPIPE || errno == ECONNRESET) {
+                std::cout << "[ServerSocket] Client disconnected during send\n";
+                return -1;
+            }
             std::cerr << "[ServerSocket] Send failed: " << strerror(errno) << "\n";
             return -1;
         }
         if (sent == 0) {
-            return totalSent;
+            std::cerr << "[ServerSocket] Send returned 0 (sent " << totalSent << "/" << size << " bytes)\n";
+            return -1;
         }
         totalSent += sent;
     }
@@ -135,11 +143,22 @@ ssize_t ServerSocket::receiveData(int fd, uint8_t* buffer, size_t size) {
     while (totalReceived < size) {
         ssize_t received = recv(fd, buffer + totalReceived, size - totalReceived, 0);
         if (received < 0) {
+            if (errno == EINTR) {
+                continue; // Interrupted, retry
+            }
             std::cerr << "[ServerSocket] Receive failed: " << strerror(errno) << "\n";
             return -1;
         }
         if (received == 0) {
-            return totalReceived;
+            // Connection closed by peer
+            if (totalReceived == 0) {
+                std::cout << "[ServerSocket] Connection closed by peer\n";
+                return 0; // Clean disconnect
+            } else {
+                std::cerr << "[ServerSocket] Unexpected disconnect (received " 
+                          << totalReceived << "/" << size << " bytes)\n";
+                return -1; // Incomplete data
+            }
         }
         totalReceived += received;
     }

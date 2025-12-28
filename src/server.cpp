@@ -98,6 +98,7 @@ void Server::run() {
     }
 
     acceptLoop();
+    std::cout << "[Server] accept loop fine\n";
 }
 
 bool Server::setSharedDirectory(const std::string& directory) {
@@ -216,7 +217,6 @@ void Server::acceptLoop() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
-
         // Accept new connection
         std::string clientAddr;
         int clientFd = socket_->acceptConnection(clientAddr);
@@ -273,6 +273,7 @@ void Server::handleClient(int clientFd, const std::string& clientAddr) {
 void Server::cleanupFinishedSessions() {
     std::lock_guard<std::mutex> lock(sessionsMutex_);
     
+    // Remove inactive sessions - destructor will handle thread cleanup
     auto it = std::remove_if(sessions_.begin(), sessions_.end(),
         [this](const std::unique_ptr<ClientSession>& session) {
             if (!session->isActive()) {

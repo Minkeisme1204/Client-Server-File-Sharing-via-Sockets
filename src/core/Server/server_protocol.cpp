@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <cerrno>
 
 ServerProtocol::ServerProtocol() 
     : sharedDirectory_("./shared") {
@@ -22,8 +23,17 @@ std::string ServerProtocol::getSharedDirectory() const {
 bool ServerProtocol::processRequest(int clientFd) {
     // Read command from client
     uint8_t cmd = 0;
-    if (ServerSocket::receiveData(clientFd, &cmd, sizeof(cmd)) <= 0) {
-        return false; // Client disconnected
+    ssize_t received = ServerSocket::receiveData(clientFd, &cmd, sizeof(cmd));
+    
+    if (received == 0) {
+        // Clean disconnect
+        std::cout << "[Protocol] Client disconnected cleanly\n";
+        return false;
+    }
+    
+    if (received < 0) {
+        std::cerr << "[Protocol] Failed to receive command\n";
+        return false;
     }
 
     // Process command
@@ -114,14 +124,19 @@ bool ServerProtocol::handlePutCommand(int clientFd) {
 std::vector<std::string> ServerProtocol::listFiles() {
     std::vector<std::string> files;
 
+    std::cout << "[Protocol] Listing files in directory: " << sharedDirectory_ << "\n";
+
     DIR* dir = opendir(sharedDirectory_.c_str());
     if (!dir) {
-        std::cerr << "[Protocol] Failed to open directory: " << sharedDirectory_ << "\n";
+        std::cerr << "[Protocol] Failed to open directory: " << sharedDirectory_ 
+                  << " (errno: " << errno << " - " << strerror(errno) << ")\n";
         return files;
     }
 
     struct dirent* entry;
+    int entryCount = 0;
     while ((entry = readdir(dir)) != nullptr) {
+        entryCount++;
         // Skip . and ..
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
             continue;
@@ -130,10 +145,20 @@ std::vector<std::string> ServerProtocol::listFiles() {
         // Check if it's a regular file
         std::string filepath = sharedDirectory_ + "/" + entry->d_name;
         struct stat fileStat;
-        if (stat(filepath.c_str(), &fileStat) == 0 && S_ISREG(fileStat.st_mode)) {
-            files.push_back(entry->d_name);
+        if (stat(filepath.c_str(), &fileStat) == 0) {
+            if (S_ISREG(fileStat.st_mode)) {
+                std::cout << "[Protocol] Found file: " << entry->d_name << "\n";
+                files.push_back(entry->d_name);
+            } else {
+                std::cout << "[Protocol] Skipping non-regular file: " << entry->d_name << "\n";
+            }
+        } else {
+            std::cerr << "[Protocol] Failed to stat: " << filepath << " (errno: " << errno << ")\n";
         }
     }
+
+    std::cout << "[Protocol] Total directory entries: " << entryCount 
+              << ", Regular files found: " << files.size() << "\n";
 
     closedir(dir);
     return files;

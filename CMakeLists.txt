@@ -84,3 +84,12 @@ target_link_libraries(client_test
     PRIVATE
         filetransfer
 )
+
+add_executable(simp_client
+    ${PROJECT_SOURCE_DIR}/tests/simple_client.cpp
+)
+
+add_executable(simp_server
+    ${PROJECT_SOURCE_DIR}/tests/simple_server.cpp
+)
+

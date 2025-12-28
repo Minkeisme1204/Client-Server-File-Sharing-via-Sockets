@@ -15,7 +15,13 @@ ClientSession::ClientSession(int clientFd, const std::string& clientAddr, const 
 }
 
 ClientSession::~ClientSession() {
-    stop();
+    // Set flag to stop processing
+    active_ = false;
+    
+    // Detach thread if it's still running - let it clean up itself
+    if (thread_ && thread_->joinable()) {
+        thread_->detach();
+    }
 }
 
 void ClientSession::start() {
@@ -28,19 +34,10 @@ void ClientSession::start() {
 }
 
 void ClientSession::stop() {
-    if (!active_) {
-        return;
-    }
-    
+    // Just signal the thread to stop
     active_ = false;
     
-    // Close socket to unblock any I/O operations
-    cleanup();
-    
-    // Wait for thread to finish
-    if (thread_ && thread_->joinable()) {
-        thread_->join();
-    }
+    // Don't join or detach - let destructor handle it
 }
 
 bool ClientSession::isActive() const {
@@ -69,19 +66,30 @@ void ClientSession::handleSession() {
 
         // Process client requests
         while (active_) {
-            bool continueSession = protocol.processRequest(clientFd_);
-            
-            if (!continueSession) {
+            try {
+                bool continueSession = protocol.processRequest(clientFd_);
+                
+                if (!continueSession) {
+                    std::cout << "[Session] Session ended normally\n";
+                    break;
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "[Session] Exception during request processing: " << e.what() << "\n";
                 break;
             }
         }
     } catch (const std::exception& e) {
-        std::cerr << "[Session] Exception in session: " << e.what() << "\n";
+        std::cerr << "[Session] Exception in session setup: " << e.what() << "\n";
     } catch (...) {
         std::cerr << "[Session] Unknown exception in session\n";
     }
 
+    // Cleanup must happen before marking inactive
+    cleanup();
+    
     std::cout << "[Session] Client disconnected: " << clientAddr_ << "\n";
+    
+    // Mark inactive as last step - this signals to cleanup thread that we're done
     active_ = false;
 }
 
