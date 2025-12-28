@@ -5,6 +5,9 @@
 #include <vector>
 #include <cstdint>
 
+// Forward declaration
+struct ServerMetrics;
+
 // Protocol command codes
 #define CMD_LIST 0x01
 #define CMD_GET  0x02
@@ -33,6 +36,12 @@ public:
      * @return Shared directory path
      */
     std::string getSharedDirectory() const;
+
+    /**
+     * @brief Set metrics pointer for tracking
+     * @param metrics Pointer to server metrics
+     */
+    void setMetrics(ServerMetrics* metrics);
 
     /**
      * @brief Handle LIST command - send list of files to client
@@ -64,6 +73,7 @@ public:
 
 private:
     std::string sharedDirectory_;
+    ServerMetrics* metrics_;
 
     // Helper methods
     std::vector<std::string> listFiles();

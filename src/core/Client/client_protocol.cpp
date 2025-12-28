@@ -4,6 +4,9 @@
 #include <fstream>
 #include <cstring>
 #include <sys/stat.h>
+#include <sys/socket.h>
+#include <stdexcept>
+#include <vector>
 
 // Protocol command codes
 #define CMD_LIST 0x01
@@ -65,17 +68,17 @@ void ClientProtocol::request_list() {
     }
 }
 
-void ClientProtocol::request_get(const std::string &filename, const std::string &save_dir) {
+uint64_t ClientProtocol::request_get(const std::string &filename, const std::string &save_dir) {
     if (!socket_.isConnected()) {
         std::cerr << "[Protocol] Not connected to server\n";
-        return;
+        return 0;
     }
 
     // Send GET command
     uint8_t cmd = CMD_GET;
     if (socket_.sendData(&cmd, sizeof(cmd)) < 0) {
         std::cerr << "[Protocol] Failed to send GET command\n";
-        return;
+        return 0;
     }
 
     // Send filename
@@ -83,19 +86,19 @@ void ClientProtocol::request_get(const std::string &filename, const std::string 
     std::strncpy(filenameBuf, filename.c_str(), sizeof(filenameBuf) - 1);
     if (socket_.sendData(reinterpret_cast<uint8_t*>(filenameBuf), sizeof(filenameBuf)) < 0) {
         std::cerr << "[Protocol] Failed to send filename\n";
-        return;
+        return 0;
     }
 
     // Receive file size
     uint64_t fileSize = 0;
     if (socket_.receiveData(reinterpret_cast<uint8_t*>(&fileSize), sizeof(fileSize)) < 0) {
         std::cerr << "[Protocol] Failed to receive file size\n";
-        return;
+        return 0;
     }
 
     if (fileSize == 0) {
         std::cerr << "[Protocol] File not found on server\n";
-        return;
+        return 0;
     }
 
     // Create output file path
@@ -103,7 +106,7 @@ void ClientProtocol::request_get(const std::string &filename, const std::string 
     std::ofstream outFile(outputPath, std::ios::binary);
     if (!outFile) {
         std::cerr << "[Protocol] Failed to create file: " << outputPath << "\n";
-        return;
+        return 0;
     }
 
     std::cout << "[Protocol] Downloading " << filename << " (" << fileSize << " bytes)\n";
@@ -120,7 +123,7 @@ void ClientProtocol::request_get(const std::string &filename, const std::string 
         if (received <= 0) {
             std::cerr << "[Protocol] Failed to receive file data\n";
             outFile.close();
-            return;
+            return 0;
         }
 
         outFile.write(reinterpret_cast<char*>(buffer), received);
@@ -134,19 +137,20 @@ void ClientProtocol::request_get(const std::string &filename, const std::string 
 
     std::cout << "\n[Protocol] Download completed: " << outputPath << "\n";
     outFile.close();
+    return fileSize;
 }
 
-void ClientProtocol::request_put(const std::string &filepath) {
+uint64_t ClientProtocol::request_put(const std::string &filepath) {
     if (!socket_.isConnected()) {
         std::cerr << "[Protocol] Not connected to server\n";
-        return;
+        return 0;
     }
 
     // Check if file exists
     struct stat fileStat;
     if (stat(filepath.c_str(), &fileStat) != 0) {
         std::cerr << "[Protocol] File not found: " << filepath << "\n";
-        return;
+        return 0;
     }
 
     uint64_t fileSize = fileStat.st_size;
@@ -159,14 +163,14 @@ void ClientProtocol::request_put(const std::string &filepath) {
     std::ifstream inFile(filepath, std::ios::binary);
     if (!inFile) {
         std::cerr << "[Protocol] Failed to open file: " << filepath << "\n";
-        return;
+        return 0;
     }
 
     // Send PUT command
     uint8_t cmd = CMD_PUT;
     if (socket_.sendData(&cmd, sizeof(cmd)) < 0) {
         std::cerr << "[Protocol] Failed to send PUT command\n";
-        return;
+        return 0;
     }
 
     // Send filename
@@ -174,13 +178,13 @@ void ClientProtocol::request_put(const std::string &filepath) {
     std::strncpy(filenameBuf, filename.c_str(), sizeof(filenameBuf) - 1);
     if (socket_.sendData(reinterpret_cast<uint8_t*>(filenameBuf), sizeof(filenameBuf)) < 0) {
         std::cerr << "[Protocol] Failed to send filename\n";
-        return;
+        return 0;
     }
 
     // Send file size
     if (socket_.sendData(reinterpret_cast<uint8_t*>(&fileSize), sizeof(fileSize)) < 0) {
         std::cerr << "[Protocol] Failed to send file size\n";
-        return;
+        return 0;
     }
 
     std::cout << "[Protocol] Uploading " << filename << " (" << fileSize << " bytes)\n";
@@ -197,7 +201,7 @@ void ClientProtocol::request_put(const std::string &filepath) {
         if (socket_.sendData(reinterpret_cast<uint8_t*>(buffer), bytesRead) < 0) {
             std::cerr << "[Protocol] Failed to send file data\n";
             inFile.close();
-            return;
+            return 0;
         }
 
         totalSent += bytesRead;
@@ -210,4 +214,33 @@ void ClientProtocol::request_put(const std::string &filepath) {
 
     std::cout << "\n[Protocol] Upload completed\n";
     inFile.close();
+    return fileSize;
+}
+
+void ClientProtocol::sendListCommand(int sockfd) {
+    uint8_t cmd = CMD_LIST;
+    if (send(sockfd, &cmd, sizeof(cmd), 0) < 0) {
+        throw std::runtime_error("Failed to send LIST command");
+    }
+}
+
+std::vector<std::string> ClientProtocol::receiveFileList(int sockfd) {
+    std::vector<std::string> files;
+    
+    // Receive number of files
+    uint32_t fileCount = 0;
+    if (recv(sockfd, &fileCount, sizeof(fileCount), 0) != sizeof(fileCount)) {
+        throw std::runtime_error("Failed to receive file count");
+    }
+    
+    // Receive each filename
+    for (uint32_t i = 0; i < fileCount; i++) {
+        char filename[256] = {0};
+        if (recv(sockfd, filename, sizeof(filename), 0) != sizeof(filename)) {
+            throw std::runtime_error("Failed to receive filename");
+        }
+        files.push_back(std::string(filename));
+    }
+    
+    return files;
 }

@@ -95,6 +95,31 @@ bool Client::listFiles() {
     }
 }
 
+std::vector<std::string> Client::getFileList() {
+    std::vector<std::string> files;
+    
+    if (!isConnected()) {
+        std::cerr << "[Client] Not connected to server\n";
+        return files;
+    }
+
+    try {
+        // Send LIST command
+        protocol_->sendListCommand(socket_->getSocketFd());
+
+        // Receive file list from protocol
+        files = protocol_->receiveFileList(socket_->getSocketFd());
+        
+        if (verbose_) {
+            std::cout << "[Client] Received " << files.size() << " files from server\n";
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[Client] Error getting file list: " << e.what() << "\n";
+    }
+
+    return files;
+}
+
 bool Client::getFile(const std::string& filename, const std::string& saveDir) {
     if (!isConnected()) {
         std::cerr << "[Client] Not connected to server\n";
@@ -109,14 +134,21 @@ bool Client::getFile(const std::string& filename, const std::string& saveDir) {
     try {
         auto startTime = std::chrono::high_resolution_clock::now();
         
-        protocol_->request_get(filename, saveDir);
+        uint64_t fileSize = protocol_->request_get(filename, saveDir);
         
         auto endTime = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
         metrics_.transfer_latency_ms = duration.count();
         
-        // Calculate throughput (simplified - would need actual file size)
-        // metrics_.throughput_kbps = (fileSize * 8.0) / (duration.count() / 1000.0) / 1024.0;
+        // Calculate throughput
+        if (duration.count() > 0) {
+            metrics_.throughput_kbps = (fileSize * 8.0) / (duration.count() / 1000.0) / 1024.0;
+        }
+        
+        // Update metrics
+        metrics_.totalBytesReceived += fileSize;
+        metrics_.filesDownloaded++;
+        metrics_.totalOperations++;
         
         updateMetrics();
         logOperation("get:" + filename, true);
@@ -141,11 +173,16 @@ bool Client::putFile(const std::string& filepath) {
     try {
         auto startTime = std::chrono::high_resolution_clock::now();
         
-        protocol_->request_put(filepath);
+        uint64_t fileSize = protocol_->request_put(filepath);
         
         auto endTime = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
         metrics_.transfer_latency_ms = duration.count();
+        
+        // Update metrics (fileSize returned from put)
+        metrics_.totalBytesSent += fileSize;
+        metrics_.filesUploaded++;
+        metrics_.totalOperations++;
         
         updateMetrics();
         logOperation("put:" + filepath, true);

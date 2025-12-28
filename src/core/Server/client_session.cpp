@@ -1,21 +1,29 @@
 #include "client_session.h"
 #include "server_socket.h"
 #include "server_protocol.h"
+#include "server_metrics.h"
 #include <iostream>
 #include <unistd.h>
 #include <cstring>
+#include <cerrno>
+#include <sys/socket.h>
 
-ClientSession::ClientSession(int clientFd, const std::string& clientAddr, const std::string& sharedDir)
+ClientSession::ClientSession(int clientFd, const std::string& clientAddr, const std::string& sharedDir, ServerMetrics* metrics)
     : clientFd_(clientFd),
       clientAddr_(clientAddr),
       sharedDir_(sharedDir),
       active_(false),
-      bytesTransferred_(0) {
+      bytesTransferred_(0),
+      metrics_(metrics) {
     startTime_ = std::chrono::system_clock::now();
 }
 
 ClientSession::~ClientSession() {
-    stop();
+    try {
+        stop();
+    } catch (...) {
+        // Silently handle exceptions in destructor
+    }
 }
 
 void ClientSession::start() {
@@ -37,7 +45,7 @@ void ClientSession::stop() {
     // Close socket to unblock any I/O operations
     cleanup();
     
-    // Wait for thread to finish
+    // Wait for thread to finish properly
     if (thread_ && thread_->joinable()) {
         thread_->join();
     }
@@ -62,10 +70,28 @@ size_t ClientSession::getBytesTransferred() const {
 void ClientSession::handleSession() {
     std::cout << "[Session] Client connected: " << clientAddr_ << " (fd: " << clientFd_ << ")\n";
 
+    // Validate fd before using it
+    if (clientFd_ < 0) {
+        std::cerr << "[Session] Invalid socket fd: " << clientFd_ << "\n";
+        active_ = false;
+        return;
+    }
+
+    // Set socket timeout to prevent blocking forever
+    struct timeval tv;
+    tv.tv_sec = 5;  // 5 second timeout
+    tv.tv_usec = 0;
+    
+    if (setsockopt(clientFd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+        std::cerr << "[Session] Failed to set socket timeout: " << strerror(errno) << "\n";
+        // Continue anyway, just won't have timeout
+    }
+
     try {
         // Create protocol handler for this session
         ServerProtocol protocol;
         protocol.setSharedDirectory(sharedDir_);
+        protocol.setMetrics(metrics_);
 
         // Process client requests
         while (active_) {

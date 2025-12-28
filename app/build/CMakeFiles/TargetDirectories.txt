@@ -1,0 +1,8 @@
+/home/minkeisrtx5090/Desktop/Workplace/HUST/06_Computer_Network/Client-Server-File-Sharing-via-Sockets/app/build/CMakeFiles/client_gui.dir
+/home/minkeisrtx5090/Desktop/Workplace/HUST/06_Computer_Network/Client-Server-File-Sharing-via-Sockets/app/build/CMakeFiles/server_gui.dir
+/home/minkeisrtx5090/Desktop/Workplace/HUST/06_Computer_Network/Client-Server-File-Sharing-via-Sockets/app/build/CMakeFiles/edit_cache.dir
+/home/minkeisrtx5090/Desktop/Workplace/HUST/06_Computer_Network/Client-Server-File-Sharing-via-Sockets/app/build/CMakeFiles/rebuild_cache.dir
+/home/minkeisrtx5090/Desktop/Workplace/HUST/06_Computer_Network/Client-Server-File-Sharing-via-Sockets/app/build/CMakeFiles/client_gui_autogen_timestamp_deps.dir
+/home/minkeisrtx5090/Desktop/Workplace/HUST/06_Computer_Network/Client-Server-File-Sharing-via-Sockets/app/build/CMakeFiles/client_gui_autogen.dir
+/home/minkeisrtx5090/Desktop/Workplace/HUST/06_Computer_Network/Client-Server-File-Sharing-via-Sockets/app/build/CMakeFiles/server_gui_autogen_timestamp_deps.dir
+/home/minkeisrtx5090/Desktop/Workplace/HUST/06_Computer_Network/Client-Server-File-Sharing-via-Sockets/app/build/CMakeFiles/server_gui_autogen.dir

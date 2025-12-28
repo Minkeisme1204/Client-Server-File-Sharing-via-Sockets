@@ -1,6 +1,6 @@
 # Client-Server File Sharing via Sockets
 
-A professional client-server file sharing application built using C++ socket programming. Features include binary file transfer, multi-client support, real-time metrics, and graceful error handling.
+A professional client-server file sharing application built using C++ socket programming. Features include binary file transfer, multi-client support, real-time metrics, and graceful error handling. Available as both CLI terminal applications and Qt-based GUI applications.
 
 ## ✨ Features
 
@@ -8,33 +8,35 @@ A professional client-server file sharing application built using C++ socket pro
 - 💾 **Binary Support**: Transfer any file type (text, audio, video, images, executables)
 - 👥 **Multi-Client**: Handle up to 10 concurrent connections
 - 📊 **Metrics Tracking**: Real-time statistics and CSV export
-- 🎨 **Professional UI**: Interactive terminal interface with colored output
+- 🎨 **Professional UI**: Interactive terminal interface AND graphical Qt5/Qt6 GUI
 - 🛡️ **Robust**: Graceful shutdown, exception handling, data integrity
 - 🔧 **Configurable**: Timeout, shared directory, verbose logging
 
 ## 🚀 Quick Start
 
-### Build
+### Option 1: CLI Terminal Applications
+
+#### Build
 ```bash
 cd build
 cmake ..
 make
 ```
 
-### Run Server
+#### Run Server
 ```bash
 ./build/server_test          # Default: port 8080, dir ./shared
 ./build/server_test 9000     # Custom port
 ./build/server_test 9000 /path/to/files  # Custom port & directory
 ```
 
-### Run Client
+#### Run Client
 ```bash
 ./build/client_test 127.0.0.1 8080  # Auto-connect
 ./build/client_test                  # Manual connect
 ```
 
-### Usage
+#### Usage
 ```bash
 # In client terminal:
 Client> list                    # List files on server
@@ -44,9 +46,40 @@ Client> metrics                 # View statistics
 Client> help                    # Show all commands
 ```
 
+### Option 2: Qt GUI Applications
+
+#### Build GUI
+```bash
+cd app
+mkdir build && cd build
+cmake ..
+make
+```
+
+#### Run GUI
+```bash
+# Quick launch both server and client GUI:
+cd app
+./run_gui.sh
+
+# Or run individually:
+./app/build/server_gui    # Start server GUI
+./app/build/client_gui    # Start client GUI
+```
+
+**GUI Features:**
+- Server GUI: Start/stop server, view active clients, monitor metrics in real-time
+- Client GUI: Connect to server, browse files, upload/download with progress, view transfer log
+- Color-coded status indicators (green = connected/running, red = disconnected/stopped)
+- Tabbed interface for better organization
+- Export metrics to CSV
+
+See [app/README.md](app/README.md) for detailed GUI documentation.
+
 ## 📖 Documentation
 
-- [TEST_USAGE.md](TEST_USAGE.md) - Complete usage guide
+- [app/README.md](app/README.md) - Qt GUI applications guide
+- [TEST_USAGE.md](TEST_USAGE.md) - Complete CLI usage guide
 - [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) - Implementation details
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture
 - [BUILD.md](BUILD.md) - Build instructions

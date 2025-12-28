@@ -6,6 +6,7 @@
 #include <cstring>
 #include <iostream>
 #include <errno.h>
+#include <signal.h>
 
 ServerSocket::ServerSocket() 
     : socketFd_(-1),
@@ -112,8 +113,17 @@ ssize_t ServerSocket::sendData(int fd, const uint8_t* data, size_t size) {
 
     size_t totalSent = 0;
     while (totalSent < size) {
-        ssize_t sent = send(fd, data + totalSent, size - totalSent, 0);
+        ssize_t sent = send(fd, data + totalSent, size - totalSent, MSG_NOSIGNAL);
         if (sent < 0) {
+            if (errno == EINTR) {
+                // Interrupted, try again
+                continue;
+            }
+            if (errno == EPIPE || errno == ECONNRESET) {
+                // Broken pipe or connection reset - client disconnected
+                std::cerr << "[ServerSocket] Client disconnected during send\n";
+                return -1;
+            }
             std::cerr << "[ServerSocket] Send failed: " << strerror(errno) << "\n";
             return -1;
         }
@@ -135,11 +145,28 @@ ssize_t ServerSocket::receiveData(int fd, uint8_t* buffer, size_t size) {
     while (totalReceived < size) {
         ssize_t received = recv(fd, buffer + totalReceived, size - totalReceived, 0);
         if (received < 0) {
+            if (errno == EINTR) {
+                // Interrupted, try again
+                continue;
+            }
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // Timeout - this is expected with SO_RCVTIMEO, not an error
+                // Return what we have so far
+                return totalReceived > 0 ? totalReceived : 0;
+            }
+            if (errno == ECONNRESET || errno == EPIPE) {
+                // Connection reset by peer - clean disconnect
+                return 0;
+            }
             std::cerr << "[ServerSocket] Receive failed: " << strerror(errno) << "\n";
             return -1;
         }
         if (received == 0) {
-            return totalReceived;
+            // Clean disconnect
+            if (totalReceived == 0) {
+                return 0; // Client closed connection before sending anything
+            }
+            return totalReceived; // Partial data received
         }
         totalReceived += received;
     }

@@ -1,5 +1,6 @@
 #include "server_protocol.h"
 #include "server_socket.h"
+#include "server_metrics.h"
 #include <iostream>
 #include <fstream>
 #include <cstring>
@@ -8,7 +9,7 @@
 #include <unistd.h>
 
 ServerProtocol::ServerProtocol() 
-    : sharedDirectory_("./shared") {
+    : sharedDirectory_("./shared"), metrics_(nullptr) {
 }
 
 void ServerProtocol::setSharedDirectory(const std::string& directory) {
@@ -19,11 +20,24 @@ std::string ServerProtocol::getSharedDirectory() const {
     return sharedDirectory_;
 }
 
+void ServerProtocol::setMetrics(ServerMetrics* metrics) {
+    metrics_ = metrics;
+}
+
 bool ServerProtocol::processRequest(int clientFd) {
     // Read command from client
     uint8_t cmd = 0;
-    if (ServerSocket::receiveData(clientFd, &cmd, sizeof(cmd)) <= 0) {
-        return false; // Client disconnected
+    ssize_t bytesRead = ServerSocket::receiveData(clientFd, &cmd, sizeof(cmd));
+    
+    if (bytesRead == 0) {
+        // Client disconnected cleanly
+        return false;
+    }
+    
+    if (bytesRead < 0) {
+        // Error occurred
+        std::cerr << "[Protocol] Error reading command from client\n";
+        return false;
     }
 
     // Process command
@@ -188,6 +202,13 @@ bool ServerProtocol::sendFile(int clientFd, const std::string& filename) {
 
     file.close();
     std::cout << "[Protocol] File sent successfully: " << filename << " (" << totalSent << " bytes)\n";
+    
+    // Update metrics
+    if (metrics_) {
+        metrics_->totalBytesSent += totalSent;
+        metrics_->filesDownloaded++;
+    }
+    
     return true;
 }
 
@@ -224,5 +245,12 @@ bool ServerProtocol::receiveFile(int clientFd, const std::string& filename, uint
 
     file.close();
     std::cout << "[Protocol] File received successfully: " << filename << " (" << totalReceived << " bytes)\n";
+    
+    // Update metrics
+    if (metrics_) {
+        metrics_->totalBytesReceived += totalReceived;
+        metrics_->filesUploaded++;
+    }
+    
     return true;
 }

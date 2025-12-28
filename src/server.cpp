@@ -64,21 +64,29 @@ void Server::stop() {
     // Close socket to unblock accept()
     socket_->close();
 
-    // Wait for accept thread to finish (with timeout)
+    // Note: acceptThread_ is only used when the server manages its own thread
+    // When run() is called from an external thread, that thread must be managed externally
     if (acceptThread_ && acceptThread_->joinable()) {
         acceptThread_->join();
+        acceptThread_.reset();
     }
 
     // Stop all client sessions
     {
         std::lock_guard<std::mutex> lock(sessionsMutex_);
+        if (verbose_) {
+            std::cout << "[Server] Stopping " << sessions_.size() << " client session(s)...\n";
+        }
         for (auto& session : sessions_) {
             if (session) {
-                session->stop();
+                session->stop(); // This will join the session thread
             }
         }
         sessions_.clear();
     }
+
+    // Recreate socket for clean restart
+    socket_ = std::make_unique<ServerSocket>();
 
     if (verbose_) {
         std::cout << "[Server] Server stopped\n";
@@ -185,7 +193,13 @@ void Server::displayMetrics() const {
 
 size_t Server::getActiveSessionCount() const {
     std::lock_guard<std::mutex> lock(sessionsMutex_);
-    return sessions_.size();
+    size_t count = 0;
+    for (const auto& session : sessions_) {
+        if (session && session->isActive()) {
+            count++;
+        }
+    }
+    return count;
 }
 
 std::vector<std::string> Server::getActiveClients() const {
@@ -205,7 +219,8 @@ void Server::acceptLoop() {
     std::cout << "[Server] Accepting client connections...\n";
 
     while (running_) {
-        // Clean up finished sessions
+        // Clean up finished sessions BEFORE accepting new ones
+        // This ensures old fd is closed before new fd with same number is accepted
         cleanupFinishedSessions();
 
         // Check if max connections reached
@@ -238,12 +253,16 @@ void Server::acceptLoop() {
             close(clientFd);
             break;
         }
+        
+        // CRITICAL: Ensure cleanup is done before using this fd
+        // Sleep briefly to ensure old session with potentially same fd is fully cleaned
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
         // Update metrics
         metrics_.incrementConnections();
 
-        // Create and start new session
-        auto session = std::make_unique<ClientSession>(clientFd, clientAddr, sharedDirectory_);
+        // Create and start new session with metrics pointer
+        auto session = std::make_unique<ClientSession>(clientFd, clientAddr, sharedDirectory_, &metrics_);
         session->start();
 
         {
@@ -271,18 +290,38 @@ void Server::handleClient(int clientFd, const std::string& clientAddr) {
 }
 
 void Server::cleanupFinishedSessions() {
-    std::lock_guard<std::mutex> lock(sessionsMutex_);
+    // Collect sessions to remove outside of lock
+    std::vector<std::unique_ptr<ClientSession>> sessionsToCleanup;
     
-    auto it = std::remove_if(sessions_.begin(), sessions_.end(),
-        [this](const std::unique_ptr<ClientSession>& session) {
-            if (!session->isActive()) {
-                metrics_.decrementActiveConnections();
-                return true;
+    {
+        std::lock_guard<std::mutex> lock(sessionsMutex_);
+        
+        auto it = std::remove_if(sessions_.begin(), sessions_.end(),
+            [](const std::unique_ptr<ClientSession>& session) {
+                return !session || !session->isActive();
+            });
+        
+        // Move finished sessions out
+        if (it != sessions_.end()) {
+            for (auto iter = it; iter != sessions_.end(); ++iter) {
+                if (*iter) {
+                    sessionsToCleanup.push_back(std::move(*iter));
+                }
             }
-            return false;
-        });
+            sessions_.erase(it, sessions_.end());
+        }
+    }
     
-    sessions_.erase(it, sessions_.end());
+    // Now cleanup outside of lock to avoid deadlock
+    if (!sessionsToCleanup.empty()) {
+        if (verbose_) {
+            std::cout << "[Server] Cleaning up " << sessionsToCleanup.size() << " finished session(s)...\n";
+        }
+        for (auto& session : sessionsToCleanup) {
+            session->stop(); // Join thread
+        }
+        sessionsToCleanup.clear();
+    }
 }
 
 void Server::logEvent(const std::string& event) {

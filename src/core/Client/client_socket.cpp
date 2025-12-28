@@ -9,7 +9,7 @@ ClientSocket::ClientSocket() : socketFd_(-1) {
 }
 
 ClientSocket::~ClientSocket() {
-    disconnect();
+    if(socketFd_ != -1) disconnect();
 }
 
 bool ClientSocket::connectToServer(const std::string& ip, uint16_t port) {

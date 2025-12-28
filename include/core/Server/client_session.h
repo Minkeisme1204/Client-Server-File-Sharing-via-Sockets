@@ -7,6 +7,9 @@
 #include <atomic>
 #include <chrono>
 
+// Forward declaration
+struct ServerMetrics;
+
 /**
  * @class ClientSession
  * @brief Represents a single client connection session
@@ -21,8 +24,9 @@ public:
      * @param clientFd Client socket file descriptor
      * @param clientAddr Client address information
      * @param sharedDir Shared directory path
+     * @param metrics Pointer to server metrics
      */
-    ClientSession(int clientFd, const std::string& clientAddr, const std::string& sharedDir);
+    ClientSession(int clientFd, const std::string& clientAddr, const std::string& sharedDir, ServerMetrics* metrics = nullptr);
 
     /**
      * @brief Destructor
@@ -71,6 +75,7 @@ private:
     std::atomic<bool> active_;
     std::chrono::system_clock::time_point startTime_;
     std::atomic<size_t> bytesTransferred_;
+    ServerMetrics* metrics_;
 
     // Session handling
     void handleSession();
