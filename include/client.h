@@ -54,6 +54,12 @@ public:
     bool listFiles();
 
     /**
+     * @brief Get list of files from server (returns file names)
+     * @return vector of file names on success, empty vector on failure
+     */
+    std::vector<std::string> getFileList();
+
+    /**
      * @brief Download a file from server
      * @param filename Name of file to download
      * @param saveDir Directory to save the file

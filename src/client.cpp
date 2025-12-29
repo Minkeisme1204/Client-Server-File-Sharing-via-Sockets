@@ -110,6 +110,48 @@ bool Client::listFiles() {
     }
 }
 
+std::vector<std::string> Client::getFileList() {
+    if (!isConnected()) {
+        std::cerr << "[Client] Not connected to server\n";
+        return std::vector<std::string>();
+    }
+
+    if (verbose_) {
+        std::cout << "[Client] Requesting file list...\n";
+    }
+
+    try {
+        metrics_.total_requests++;
+        auto startTime = std::chrono::high_resolution_clock::now();
+        
+        std::vector<std::string> fileList = protocol_->requestFileList();
+        
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+        double duration_ms = duration_us.count() / 1000.0;
+        
+        // Update RTT with exponential moving average
+        if (metrics_.rtt_ms == 0.0) {
+            metrics_.rtt_ms = duration_ms;
+        } else {
+            metrics_.rtt_ms = (metrics_.rtt_ms * 0.7) + (duration_ms * 0.3);
+        }
+        metrics_.transfer_latency_ms = duration_ms;
+        
+        // Log to history
+        metrics_.request_history.emplace_back("LIST", "", true, 0, duration_ms);
+        
+        logOperation("list", true);
+        return fileList;
+    } catch (const std::exception& e) {
+        metrics_.failed_requests++;
+        metrics_.request_history.emplace_back("LIST", "", false, 0, 0.0, e.what());
+        std::cerr << "[Client] Error listing files: " << e.what() << "\n";
+        logOperation("list", false);
+        return std::vector<std::string>();
+    }
+}
+
 bool Client::getFile(const std::string& filename, const std::string& saveDir) {
     if (!isConnected()) {
         std::cerr << "[Client] Not connected to server\n";

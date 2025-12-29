@@ -101,3 +101,8 @@ target_link_libraries(bulk_upload_client
     PRIVATE
         filetransfer
 )
+
+# =========================
+# Add Qt5 GUI Applications
+# =========================
+add_subdirectory(app)

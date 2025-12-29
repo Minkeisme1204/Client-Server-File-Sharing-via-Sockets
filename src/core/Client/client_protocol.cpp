@@ -71,6 +71,46 @@ void ClientProtocol::request_list() {
     }
 }
 
+std::vector<std::string> ClientProtocol::requestFileList() {
+    std::vector<std::string> fileList;
+    
+    if (!socket_.isConnected()) {
+        std::cerr << "[Protocol] Not connected to server\n";
+        return fileList;
+    }
+
+    // Send LIST command
+    uint8_t cmd = CMD_LIST;
+    if (socket_.sendData(&cmd, sizeof(cmd)) < 0) {
+        std::cerr << "[Protocol] Failed to send LIST command\n";
+        return fileList;
+    }
+
+    // Receive number of files
+    uint32_t fileCount = 0;
+    ssize_t received = socket_.receiveData(reinterpret_cast<uint8_t*>(&fileCount), sizeof(fileCount));
+    if (received != sizeof(fileCount)) {
+        std::cerr << "[Protocol] Failed to receive file count\n";
+        return fileList;
+    }
+
+    // Receive each filename
+    for (uint32_t i = 0; i < fileCount; i++) {
+        char filename[256] = {0};
+        received = socket_.receiveData(reinterpret_cast<uint8_t*>(filename), sizeof(filename));
+        if (received != sizeof(filename)) {
+            std::cerr << "[Protocol] Failed to receive filename\n";
+            break;
+        }
+        // Add non-empty filenames to list
+        if (filename[0] != '\0') {
+            fileList.push_back(std::string(filename));
+        }
+    }
+
+    return fileList;
+}
+
 void ClientProtocol::request_get(const std::string &filename, const std::string &save_dir) {
     if (!socket_.isConnected()) {
         std::cerr << "[Protocol] Not connected to server\n";
