@@ -92,6 +92,12 @@ public:
      */
     void displayMetrics() const;
 
+    /**
+     * @brief Display request history
+     * @param limit Maximum number of recent requests to display (0 = all)
+     */
+    void displayHistory(size_t limit = 20) const;
+
     // Configuration
     /**
      * @brief Set timeout for operations (in seconds)

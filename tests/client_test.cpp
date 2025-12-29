@@ -27,6 +27,7 @@ void printHelp() {
     std::cout << "│  get <filename>      - Download file from server          │\n";
     std::cout << "│  put <filepath>      - Upload file to server              │\n";
     std::cout << "│  metrics             - Display client metrics             │\n";
+    std::cout << "│  history [limit]     - Display request history            │\n";
     std::cout << "│  reset               - Reset metrics                      │\n";
     std::cout << "│  export              - Export metrics to CSV              │\n";
     std::cout << "│  status              - Show connection status             │\n";
@@ -199,6 +200,23 @@ void handleExport(Client& client) {
     }
 }
 
+void handleHistory(Client& client, const std::vector<std::string>& args) {
+    size_t limit = 20; // default
+    
+    if (args.size() >= 2) {
+        try {
+            limit = std::stoul(args[1]);
+        } catch (...) {
+            std::cout << "[ERROR] Invalid limit: " << args[1] << "\n";
+            std::cout << "[INFO] Using default limit: 20\n\n";
+        }
+    }
+    
+    std::cout << "\n";
+    client.displayHistory(limit);
+    std::cout << "\n";
+}
+
 void runInteractiveMode(Client& client) {
     std::string input;
     bool running = true;
@@ -247,6 +265,9 @@ void runInteractiveMode(Client& client) {
         }
         else if (command == "metrics") {
             handleMetrics(client);
+        }
+        else if (command == "history") {
+            handleHistory(client, args);
         }
         else if (command == "reset") {
             handleReset(client);

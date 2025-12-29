@@ -2,3 +2,4 @@ build/*
 !build/client_test
 !build/server_test
 shared/
+test_files/

@@ -149,8 +149,14 @@ void ClientProtocol::request_get(const std::string &filename, const std::string 
     // Update metrics
     if (metrics_) {
         metrics_->transfer_latency_ms = duration.count();
-        if (duration.count() > 0) {
-            metrics_->throughput_kbps = (fileSize * 8.0) / duration.count();
+        metrics_->total_bytes_transferred += fileSize;
+        metrics_->total_transfer_time_ms += duration.count();
+        
+        // Calculate average throughput across all transfers
+        uint64_t total_time = metrics_->total_transfer_time_ms.load();
+        if (total_time > 0) {
+            uint64_t total_bytes = metrics_->total_bytes_transferred.load();
+            metrics_->throughput_kbps = (total_bytes * 8.0) / total_time;
         }
     }
 }
@@ -238,8 +244,14 @@ void ClientProtocol::request_put(const std::string &filepath) {
     // Update metrics
     if (metrics_) {
         metrics_->transfer_latency_ms = duration.count();
-        if (duration.count() > 0) {
-            metrics_->throughput_kbps = (fileSize * 8.0) / duration.count();
+        metrics_->total_bytes_transferred += fileSize;
+        metrics_->total_transfer_time_ms += duration.count();
+        
+        // Calculate average throughput across all transfers
+        uint64_t total_time = metrics_->total_transfer_time_ms.load();
+        if (total_time > 0) {
+            uint64_t total_bytes = metrics_->total_bytes_transferred.load();
+            metrics_->throughput_kbps = (total_bytes * 8.0) / total_time;
         }
     }
 }

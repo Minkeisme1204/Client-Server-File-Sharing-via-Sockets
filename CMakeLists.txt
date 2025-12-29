@@ -93,3 +93,11 @@ add_executable(simp_server
     ${PROJECT_SOURCE_DIR}/tests/simple_server.cpp
 )
 
+add_executable(bulk_upload_client
+    ${PROJECT_SOURCE_DIR}/tests/bulk_upload_client.cpp
+)
+
+target_link_libraries(bulk_upload_client
+    PRIVATE
+        filetransfer
+)

@@ -4,6 +4,27 @@
 #include <string>
 #include <chrono>
 #include <atomic>
+#include <vector>
+#include <ctime>
+
+/**
+ * @struct RequestRecord
+ * @brief Record of a single client request
+ */
+struct RequestRecord {
+    std::time_t timestamp;           // When the request was made
+    std::string operation;           // GET, PUT, LIST
+    std::string filename;            // File name (empty for LIST)
+    bool success;                    // Whether request succeeded
+    uint64_t bytes_transferred;      // Bytes transferred
+    double duration_ms;              // Request duration in milliseconds
+    std::string error_msg;           // Error message if failed
+    
+    RequestRecord(const std::string& op, const std::string& file, bool succ, 
+                  uint64_t bytes, double dur, const std::string& err = "")
+        : timestamp(std::time(nullptr)), operation(op), filename(file),
+          success(succ), bytes_transferred(bytes), duration_ms(dur), error_msg(err) {}
+};
 
 struct ClientMetrics {
     double rtt_ms = 0.0;               // Round-trip time in milliseconds
@@ -15,6 +36,13 @@ struct ClientMetrics {
     std::atomic<uint64_t> total_requests{0};
     std::atomic<uint64_t> failed_requests{0};
     
+    // For throughput calculation
+    std::atomic<uint64_t> total_bytes_transferred{0};
+    std::atomic<uint64_t> total_transfer_time_ms{0};
+    
+    // Request history
+    std::vector<RequestRecord> request_history;
+    
     // Custom copy constructor and assignment for atomic members
     ClientMetrics() = default;
     
@@ -24,7 +52,10 @@ struct ClientMetrics {
           packet_loss_rate(other.packet_loss_rate),
           transfer_latency_ms(other.transfer_latency_ms),
           total_requests(other.total_requests.load()),
-          failed_requests(other.failed_requests.load()) {
+          failed_requests(other.failed_requests.load()),
+          total_bytes_transferred(other.total_bytes_transferred.load()),
+          total_transfer_time_ms(other.total_transfer_time_ms.load()),
+          request_history(other.request_history) {
     }
     
     ClientMetrics& operator=(const ClientMetrics& other) {
@@ -35,6 +66,9 @@ struct ClientMetrics {
             transfer_latency_ms = other.transfer_latency_ms;
             total_requests.store(other.total_requests.load());
             failed_requests.store(other.failed_requests.load());
+            total_bytes_transferred.store(other.total_bytes_transferred.load());
+            total_transfer_time_ms.store(other.total_transfer_time_ms.load());
+            request_history = other.request_history;
         }
         return *this;
     }
