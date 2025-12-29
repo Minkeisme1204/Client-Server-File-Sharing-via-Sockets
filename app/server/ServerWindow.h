@@ -66,6 +66,7 @@ private:
     void updateStatusBar();
     void appendLog(const QString& text, const QString& color = "black");
     QString getServerIP();
+    QString getTailscaleIP();
     
     // UI Components
     QLabel* statusLabel;

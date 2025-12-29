@@ -1,4 +1,5 @@
 #include "ClientWindow.h"
+#include "../common/NetworkUtils.h"
 #include <QMessageBox>
 #include <QInputDialog>
 #include <QFileInfo>
@@ -162,7 +163,15 @@ void ClientWindow::setupUI() {
     
     commandCombo = new QComboBox(this);
     commandCombo->setEditable(true);
-    commandCombo->addItem("connect 192.168.1.100 99000");
+    
+    // Auto-detect Tailscale IP for default command
+    QString tailscaleIP = NetworkUtils::getTailscaleIP();
+    if (!tailscaleIP.isEmpty()) {
+        commandCombo->addItem(QString("connect %1 9000").arg(tailscaleIP));
+    } else {
+        commandCombo->addItem("connect 192.168.1.100 9000");
+    }
+    
     commandCombo->addItem("list");
     commandCombo->addItem("get <filename>");
     commandCombo->addItem("put <filepath>");
@@ -198,6 +207,32 @@ void ClientWindow::setupUI() {
     
     // Action buttons row 1
     QHBoxLayout* buttonsRow1 = new QHBoxLayout();
+    
+    // Quick Connect button with Tailscale
+    QPushButton* quickConnectButton = new QPushButton("🌐 Quick Connect (Tailscale)", this);
+    quickConnectButton->setStyleSheet("QPushButton { background-color: #4CAF50; }");
+    connect(quickConnectButton, &QPushButton::clicked, this, [this]() {
+        QString tailscaleIP = NetworkUtils::getTailscaleIP();
+        if (tailscaleIP.isEmpty()) {
+            QMessageBox::warning(this, "Tailscale Not Found", 
+                "Tailscale IP not detected. Please:\n\n"
+                "1. Install Tailscale: curl -fsSL https://tailscale.com/install.sh | sh\n"
+                "2. Login: sudo tailscale up\n"
+                "3. Check status: tailscale status\n\n"
+                "Or use regular Connect button for local network.");
+            return;
+        }
+        
+        bool ok;
+        int port = QInputDialog::getInt(this, "Quick Connect",
+            QString("Connect to Tailscale IP: %1\n\nEnter port:").arg(tailscaleIP),
+            9000, 1, 65535, 1, &ok);
+        
+        if (ok) {
+            connectToServer(tailscaleIP, port);
+        }
+    });
+    buttonsRow1->addWidget(quickConnectButton);
     
     disconnectButton = new QPushButton("Disconnect", this);
     disconnectButton->setObjectName("disconnectButton");
@@ -399,10 +434,27 @@ void ClientWindow::processCommand(const QString& command) {
 }
 
 void ClientWindow::onConnectClicked() {
+    // Auto-detect Tailscale IP for default value
+    QString tailscaleIP = NetworkUtils::getTailscaleIP();
+    QString defaultValue;
+    
+    if (!tailscaleIP.isEmpty()) {
+        defaultValue = QString("%1:9000").arg(tailscaleIP);
+    } else {
+        QString localIP = NetworkUtils::getLocalIP();
+        defaultValue = QString("%1:9000").arg(localIP);
+    }
+    
+    // Build prompt message
+    QString promptMsg = "Enter IP:Port (e.g., 192.168.1.100:9000):";
+    if (!tailscaleIP.isEmpty()) {
+        promptMsg = QString("🌐 Tailscale IP detected: %1\n\nEnter IP:Port:").arg(tailscaleIP);
+    }
+    
     bool ok;
     QString input = QInputDialog::getText(this, "Connect to Server",
-                                         "Enter IP:Port (e.g., 192.168.1.100:9000):",
-                                         QLineEdit::Normal, "192.168.1.100:9000", &ok);
+                                         promptMsg,
+                                         QLineEdit::Normal, defaultValue, &ok);
     if (ok && !input.isEmpty()) {
         QStringList parts = input.split(':');
         if (parts.size() == 2) {

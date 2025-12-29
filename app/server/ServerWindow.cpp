@@ -1,4 +1,5 @@
 #include "ServerWindow.h"
+#include "../common/NetworkUtils.h"
 #include <QMessageBox>
 #include <QInputDialog>
 #include <QDateTime>
@@ -345,12 +346,18 @@ void ServerWindow::appendLog(const QString& text, const QString& color) {
 }
 
 QString ServerWindow::getServerIP() {
-    foreach (const QHostAddress &address, QNetworkInterface::allAddresses()) {
-        if (address.protocol() == QAbstractSocket::IPv4Protocol && !address.isLoopback()) {
-            return address.toString();
-        }
+    QString tailscaleIP = NetworkUtils::getTailscaleIP();
+    QString localIP = NetworkUtils::getLocalIP();
+    
+    if (!tailscaleIP.isEmpty()) {
+        return QString("Tailscale: %1 | Local: %2").arg(tailscaleIP).arg(localIP);
+    } else {
+        return QString("Local: %1").arg(localIP);
     }
-    return "127.0.0.1";
+}
+
+QString ServerWindow::getTailscaleIP() {
+    return NetworkUtils::getTailscaleIP();
 }
 
 void ServerWindow::startServer(int port, const QString& sharedDir) {
