@@ -4,13 +4,19 @@
 #include <fstream>
 #include <cstring>
 #include <sys/stat.h>
+#include <chrono>
 
 // Protocol command codes
 #define CMD_LIST 0x01
 #define CMD_GET  0x02
 #define CMD_PUT  0x03
 
-ClientProtocol::ClientProtocol(ClientSocket &socket) : socket_(socket) {
+ClientProtocol::ClientProtocol(ClientSocket &socket) 
+    : socket_(socket), metrics_(nullptr) {
+}
+
+void ClientProtocol::setMetrics(ClientMetrics* metrics) {
+    metrics_ = metrics;
 }
 
 void ClientProtocol::request_list() {
@@ -112,6 +118,8 @@ void ClientProtocol::request_get(const std::string &filename, const std::string 
     const size_t BUFFER_SIZE = 8192;
     uint8_t buffer[BUFFER_SIZE];
     uint64_t totalReceived = 0;
+    
+    auto startTime = std::chrono::high_resolution_clock::now();
 
     while (totalReceived < fileSize) {
         size_t toReceive = std::min(BUFFER_SIZE, static_cast<size_t>(fileSize - totalReceived));
@@ -134,6 +142,17 @@ void ClientProtocol::request_get(const std::string &filename, const std::string 
 
     std::cout << "\n[Protocol] Download completed: " << outputPath << "\n";
     outFile.close();
+    
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    
+    // Update metrics
+    if (metrics_) {
+        metrics_->transfer_latency_ms = duration.count();
+        if (duration.count() > 0) {
+            metrics_->throughput_kbps = (fileSize * 8.0) / duration.count();
+        }
+    }
 }
 
 void ClientProtocol::request_put(const std::string &filepath) {
@@ -189,6 +208,8 @@ void ClientProtocol::request_put(const std::string &filepath) {
     const size_t BUFFER_SIZE = 8192;
     char buffer[BUFFER_SIZE];
     uint64_t totalSent = 0;
+    
+    auto startTime = std::chrono::high_resolution_clock::now();
 
     while (inFile && totalSent < fileSize) {
         inFile.read(buffer, BUFFER_SIZE);
@@ -210,4 +231,15 @@ void ClientProtocol::request_put(const std::string &filepath) {
 
     std::cout << "\n[Protocol] Upload completed\n";
     inFile.close();
+    
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    
+    // Update metrics
+    if (metrics_) {
+        metrics_->transfer_latency_ms = duration.count();
+        if (duration.count() > 0) {
+            metrics_->throughput_kbps = (fileSize * 8.0) / duration.count();
+        }
+    }
 }

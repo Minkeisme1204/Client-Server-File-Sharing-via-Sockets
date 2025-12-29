@@ -56,6 +56,17 @@ void ServerMetrics::updateThroughput(uint64_t bytes, double duration_ms) {
     }
 }
 
+void ServerMetrics::updateLatency(double latency_ms) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    // Update average latency (exponential moving average)
+    if (averageLatency_ms == 0.0) {
+        averageLatency_ms = latency_ms;
+    } else {
+        averageLatency_ms = (averageLatency_ms * 0.9) + (latency_ms * 0.1);
+    }
+}
+
 void ServerMetrics::reset() {
     totalConnections = 0;
     activeConnections = 0;

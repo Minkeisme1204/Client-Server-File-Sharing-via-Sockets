@@ -146,7 +146,7 @@ private:
 
     // Server state
     std::atomic<bool> running_;
-    std::string sharedDirectory_;
+    std::shared_ptr<std::string> sharedDirectory_;
     uint16_t port_;
     size_t maxConnections_;
     int timeout_;

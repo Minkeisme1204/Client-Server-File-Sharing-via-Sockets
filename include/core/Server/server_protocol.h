@@ -3,7 +3,9 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 #include <cstdint>
+#include "server_metrics.h"
 
 // Protocol command codes
 #define CMD_LIST 0x01
@@ -27,6 +29,18 @@ public:
      * @param directory Path to shared directory
      */
     void setSharedDirectory(const std::string& directory);
+
+    /**
+     * @brief Set the shared directory pointer for dynamic updates
+     * @param directoryPtr Shared pointer to directory path
+     */
+    void setSharedDirectoryPtr(std::shared_ptr<std::string> directoryPtr);
+
+    /**
+     * @brief Set metrics pointer for tracking
+     * @param metrics Pointer to ServerMetrics
+     */
+    void setMetrics(ServerMetrics* metrics);
 
     /**
      * @brief Get the shared directory
@@ -63,7 +77,8 @@ public:
     bool processRequest(int clientFd);
 
 private:
-    std::string sharedDirectory_;
+    std::shared_ptr<std::string> sharedDirectory_;
+    ServerMetrics* metrics_;
 
     // Helper methods
     std::vector<std::string> listFiles();

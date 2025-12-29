@@ -74,6 +74,12 @@ struct ServerMetrics {
     void updateThroughput(uint64_t bytes, double duration_ms);
 
     /**
+     * @brief Update latency calculation
+     * @param latency_ms Latency in milliseconds
+     */
+    void updateLatency(double latency_ms);
+
+    /**
      * @brief Reset all metrics to zero
      */
     void reset();

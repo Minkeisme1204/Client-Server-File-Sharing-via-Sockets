@@ -5,10 +5,11 @@
 #include <unistd.h>
 #include <cstring>
 
-ClientSession::ClientSession(int clientFd, const std::string& clientAddr, const std::string& sharedDir)
+ClientSession::ClientSession(int clientFd, const std::string& clientAddr, std::shared_ptr<std::string> sharedDir, ServerMetrics* metrics)
     : clientFd_(clientFd),
       clientAddr_(clientAddr),
       sharedDir_(sharedDir),
+      metrics_(metrics),
       active_(false),
       bytesTransferred_(0) {
     startTime_ = std::chrono::system_clock::now();
@@ -62,7 +63,8 @@ void ClientSession::handleSession() {
     try {
         // Create protocol handler for this session
         ServerProtocol protocol;
-        protocol.setSharedDirectory(sharedDir_);
+        protocol.setSharedDirectoryPtr(sharedDir_);
+        protocol.setMetrics(metrics_);
 
         // Process client requests
         while (active_) {

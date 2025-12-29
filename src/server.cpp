@@ -10,7 +10,7 @@ Server::Server()
     : socket_(std::make_unique<ServerSocket>()),
       protocol_(std::make_unique<ServerProtocol>()),
       running_(false),
-      sharedDirectory_("./shared"),
+      sharedDirectory_(std::make_shared<std::string>("./shared")),
       port_(0),
       maxConnections_(0),
       timeout_(30),
@@ -115,18 +115,18 @@ bool Server::setSharedDirectory(const std::string& directory) {
         return false;
     }
 
-    sharedDirectory_ = directory;
-    protocol_->setSharedDirectory(directory);
+    *sharedDirectory_ = directory;
+    protocol_->setSharedDirectoryPtr(sharedDirectory_);
 
     if (verbose_) {
-        std::cout << "[Server] Shared directory set to: " << sharedDirectory_ << "\n";
+        std::cout << "[Server] Shared directory set to: " << *sharedDirectory_ << "\n";
     }
 
     return true;
 }
 
 std::string Server::getSharedDirectory() const {
-    return sharedDirectory_;
+    return *sharedDirectory_;
 }
 
 void Server::setMaxConnections(size_t maxConnections) {
@@ -243,7 +243,7 @@ void Server::acceptLoop() {
         metrics_.incrementConnections();
 
         // Create and start new session
-        auto session = std::make_unique<ClientSession>(clientFd, clientAddr, sharedDirectory_);
+        auto session = std::make_unique<ClientSession>(clientFd, clientAddr, sharedDirectory_, &metrics_);
         session->start();
 
         {

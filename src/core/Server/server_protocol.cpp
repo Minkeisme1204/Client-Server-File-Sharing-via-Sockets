@@ -7,20 +7,32 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <cerrno>
+#include <chrono>
 
 ServerProtocol::ServerProtocol() 
-    : sharedDirectory_("./shared") {
+    : sharedDirectory_(std::make_shared<std::string>("./shared")),
+      metrics_(nullptr) {
 }
 
 void ServerProtocol::setSharedDirectory(const std::string& directory) {
-    sharedDirectory_ = directory;
+    *sharedDirectory_ = directory;
+}
+
+void ServerProtocol::setSharedDirectoryPtr(std::shared_ptr<std::string> directoryPtr) {
+    sharedDirectory_ = directoryPtr;
+}
+
+void ServerProtocol::setMetrics(ServerMetrics* metrics) {
+    metrics_ = metrics;
 }
 
 std::string ServerProtocol::getSharedDirectory() const {
-    return sharedDirectory_;
+    return *sharedDirectory_;
 }
 
 bool ServerProtocol::processRequest(int clientFd) {
+    auto startTime = std::chrono::high_resolution_clock::now();
+    
     // Read command from client
     uint8_t cmd = 0;
     ssize_t received = ServerSocket::receiveData(clientFd, &cmd, sizeof(cmd));
@@ -36,18 +48,31 @@ bool ServerProtocol::processRequest(int clientFd) {
         return false;
     }
 
+    bool result = false;
     // Process command
     switch (cmd) {
         case CMD_LIST:
-            return handleListCommand(clientFd);
+            result = handleListCommand(clientFd);
+            break;
         case CMD_GET:
-            return handleGetCommand(clientFd);
+            result = handleGetCommand(clientFd);
+            break;
         case CMD_PUT:
-            return handlePutCommand(clientFd);
+            result = handlePutCommand(clientFd);
+            break;
         default:
             std::cerr << "[Protocol] Unknown command: " << (int)cmd << "\n";
             return false;
     }
+    
+    // Calculate and update latency
+    if (metrics_ && result) {
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+        metrics_->updateLatency(duration.count());
+    }
+    
+    return result;
 }
 
 bool ServerProtocol::handleListCommand(int clientFd) {
@@ -124,11 +149,12 @@ bool ServerProtocol::handlePutCommand(int clientFd) {
 std::vector<std::string> ServerProtocol::listFiles() {
     std::vector<std::string> files;
 
-    std::cout << "[Protocol] Listing files in directory: " << sharedDirectory_ << "\n";
+    std::string currentDir = *sharedDirectory_;
+    std::cout << "[Protocol] Listing files in directory: " << currentDir << "\n";
 
-    DIR* dir = opendir(sharedDirectory_.c_str());
+    DIR* dir = opendir(currentDir.c_str());
     if (!dir) {
-        std::cerr << "[Protocol] Failed to open directory: " << sharedDirectory_ 
+        std::cerr << "[Protocol] Failed to open directory: " << currentDir 
                   << " (errno: " << errno << " - " << strerror(errno) << ")\n";
         return files;
     }
@@ -143,7 +169,7 @@ std::vector<std::string> ServerProtocol::listFiles() {
         }
 
         // Check if it's a regular file
-        std::string filepath = sharedDirectory_ + "/" + entry->d_name;
+        std::string filepath = currentDir + "/" + entry->d_name;
         struct stat fileStat;
         if (stat(filepath.c_str(), &fileStat) == 0) {
             if (S_ISREG(fileStat.st_mode)) {
@@ -165,7 +191,7 @@ std::vector<std::string> ServerProtocol::listFiles() {
 }
 
 bool ServerProtocol::sendFile(int clientFd, const std::string& filename) {
-    std::string filepath = sharedDirectory_ + "/" + filename;
+    std::string filepath = *sharedDirectory_ + "/" + filename;
 
     // Check if file exists
     struct stat fileStat;
@@ -197,6 +223,8 @@ bool ServerProtocol::sendFile(int clientFd, const std::string& filename) {
     const size_t BUFFER_SIZE = 8192;
     char buffer[BUFFER_SIZE];
     uint64_t totalSent = 0;
+    
+    auto startTime = std::chrono::high_resolution_clock::now();
 
     while (file && totalSent < fileSize) {
         file.read(buffer, BUFFER_SIZE);
@@ -212,12 +240,28 @@ bool ServerProtocol::sendFile(int clientFd, const std::string& filename) {
     }
 
     file.close();
+    
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    
+    // Update metrics
+    if (metrics_) {
+        metrics_->addBytesSent(totalSent);
+        metrics_->filesDownloaded++;
+        
+        // Calculate and update throughput
+        if (duration.count() > 0) {
+            double throughput_kbps = (totalSent * 8.0) / duration.count();
+            metrics_->updateThroughput(totalSent, duration.count());
+        }
+    }
+    
     std::cout << "[Protocol] File sent successfully: " << filename << " (" << totalSent << " bytes)\n";
     return true;
 }
 
 bool ServerProtocol::receiveFile(int clientFd, const std::string& filename, uint64_t fileSize) {
-    std::string filepath = sharedDirectory_ + "/" + filename;
+    std::string filepath = *sharedDirectory_ + "/" + filename;
 
     // Create output file
     std::ofstream file(filepath, std::ios::binary);
@@ -230,6 +274,8 @@ bool ServerProtocol::receiveFile(int clientFd, const std::string& filename, uint
     const size_t BUFFER_SIZE = 8192;
     uint8_t buffer[BUFFER_SIZE];
     uint64_t totalReceived = 0;
+    
+    auto startTime = std::chrono::high_resolution_clock::now();
 
     while (totalReceived < fileSize) {
         size_t toReceive = std::min(BUFFER_SIZE, static_cast<size_t>(fileSize - totalReceived));
@@ -248,6 +294,22 @@ bool ServerProtocol::receiveFile(int clientFd, const std::string& filename, uint
     }
 
     file.close();
+    
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    
+    // Update metrics
+    if (metrics_) {
+        metrics_->addBytesReceived(totalReceived);
+        metrics_->filesUploaded++;
+        
+        // Calculate and update throughput
+        if (duration.count() > 0) {
+            double throughput_kbps = (totalReceived * 8.0) / duration.count();
+            metrics_->updateThroughput(totalReceived, duration.count());
+        }
+    }
+    
     std::cout << "[Protocol] File received successfully: " << filename << " (" << totalReceived << " bytes)\n";
     return true;
 }

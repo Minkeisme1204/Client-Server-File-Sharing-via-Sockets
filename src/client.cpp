@@ -31,6 +31,7 @@ bool Client::connect(const std::string& ip, uint16_t port) {
     if (success) {
         // Initialize protocol after successful connection
         protocol_ = std::make_unique<ClientProtocol>(*socket_);
+        protocol_->setMetrics(&metrics_);
         
         auto endTime = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
@@ -78,17 +79,27 @@ bool Client::listFiles() {
     }
 
     try {
+        metrics_.total_requests++;
         auto startTime = std::chrono::high_resolution_clock::now();
         
         protocol_->request_list();
         
         auto endTime = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-        metrics_.transfer_latency_ms = duration.count();
+        auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+        double duration_ms = duration_us.count() / 1000.0;
+        
+        // Update RTT with exponential moving average
+        if (metrics_.rtt_ms == 0.0) {
+            metrics_.rtt_ms = duration_ms;
+        } else {
+            metrics_.rtt_ms = (metrics_.rtt_ms * 0.7) + (duration_ms * 0.3);
+        }
+        metrics_.transfer_latency_ms = duration_ms;
         
         logOperation("list", true);
         return true;
     } catch (const std::exception& e) {
+        metrics_.failed_requests++;
         std::cerr << "[Client] Error listing files: " << e.what() << "\n";
         logOperation("list", false);
         return false;
@@ -107,13 +118,22 @@ bool Client::getFile(const std::string& filename, const std::string& saveDir) {
     }
 
     try {
+        metrics_.total_requests++;
         auto startTime = std::chrono::high_resolution_clock::now();
         
         protocol_->request_get(filename, saveDir);
         
         auto endTime = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-        metrics_.transfer_latency_ms = duration.count();
+        auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+        double duration_ms = duration_us.count() / 1000.0;
+        
+        // Update RTT with exponential moving average
+        if (metrics_.rtt_ms == 0.0) {
+            metrics_.rtt_ms = duration_ms;
+        } else {
+            metrics_.rtt_ms = (metrics_.rtt_ms * 0.7) + (duration_ms * 0.3);
+        }
+        metrics_.transfer_latency_ms = duration_ms;
         
         // Calculate throughput (simplified - would need actual file size)
         // metrics_.throughput_kbps = (fileSize * 8.0) / (duration.count() / 1000.0) / 1024.0;
@@ -122,6 +142,7 @@ bool Client::getFile(const std::string& filename, const std::string& saveDir) {
         logOperation("get:" + filename, true);
         return true;
     } catch (const std::exception& e) {
+        metrics_.failed_requests++;
         std::cerr << "[Client] Error downloading file: " << e.what() << "\n";
         logOperation("get:" + filename, false);
         return false;
@@ -139,18 +160,28 @@ bool Client::putFile(const std::string& filepath) {
     }
 
     try {
+        metrics_.total_requests++;
         auto startTime = std::chrono::high_resolution_clock::now();
         
         protocol_->request_put(filepath);
         
         auto endTime = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-        metrics_.transfer_latency_ms = duration.count();
+        auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+        double duration_ms = duration_us.count() / 1000.0;
+        
+        // Update RTT with exponential moving average
+        if (metrics_.rtt_ms == 0.0) {
+            metrics_.rtt_ms = duration_ms;
+        } else {
+            metrics_.rtt_ms = (metrics_.rtt_ms * 0.7) + (duration_ms * 0.3);
+        }
+        metrics_.transfer_latency_ms = duration_ms;
         
         updateMetrics();
         logOperation("put:" + filepath, true);
         return true;
     } catch (const std::exception& e) {
+        metrics_.failed_requests++;
         std::cerr << "[Client] Error uploading file: " << e.what() << "\n";
         logOperation("put:" + filepath, false);
         return false;
@@ -181,12 +212,21 @@ bool Client::exportMetrics(const std::string& filename) const {
 }
 
 void Client::displayMetrics() const {
+    // Calculate packet loss rate
+    double packet_loss = 0.0;
+    if (metrics_.total_requests > 0) {
+        packet_loss = (static_cast<double>(metrics_.failed_requests) / 
+                      static_cast<double>(metrics_.total_requests)) * 100.0;
+    }
+    
     std::cout << "\n=== Client Metrics ===\n";
     std::cout << std::fixed << std::setprecision(3);
     std::cout << "RTT:                 " << metrics_.rtt_ms << " ms\n";
     std::cout << "Throughput:          " << metrics_.throughput_kbps << " kbps\n";
-    std::cout << "Packet Loss Rate:    " << metrics_.packet_loss_rate << " %\n";
+    std::cout << "Packet Loss Rate:    " << packet_loss << " %\n";
     std::cout << "Transfer Latency:    " << metrics_.transfer_latency_ms << " ms\n";
+    std::cout << "Total Requests:      " << metrics_.total_requests << "\n";
+    std::cout << "Failed Requests:     " << metrics_.failed_requests << "\n";
     std::cout << "=====================\n\n";
 }
 

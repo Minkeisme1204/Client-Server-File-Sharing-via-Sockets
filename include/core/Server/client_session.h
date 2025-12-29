@@ -6,6 +6,7 @@
 #include <memory>
 #include <atomic>
 #include <chrono>
+#include "server_metrics.h"
 
 /**
  * @class ClientSession
@@ -20,9 +21,10 @@ public:
      * @brief Constructor
      * @param clientFd Client socket file descriptor
      * @param clientAddr Client address information
-     * @param sharedDir Shared directory path
+     * @param sharedDir Shared directory path (shared pointer)
+     * @param metrics Pointer to ServerMetrics
      */
-    ClientSession(int clientFd, const std::string& clientAddr, const std::string& sharedDir);
+    ClientSession(int clientFd, const std::string& clientAddr, std::shared_ptr<std::string> sharedDir, ServerMetrics* metrics);
 
     /**
      * @brief Destructor
@@ -66,7 +68,8 @@ public:
 private:
     int clientFd_;
     std::string clientAddr_;
-    std::string sharedDir_;
+    std::shared_ptr<std::string> sharedDir_;
+    ServerMetrics* metrics_;
     std::unique_ptr<std::thread> thread_;
     std::atomic<bool> active_;
     std::chrono::system_clock::time_point startTime_;
