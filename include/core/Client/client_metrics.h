@@ -37,7 +37,8 @@ struct ClientMetrics {
     std::atomic<uint64_t> failed_requests{0};
     
     // For throughput calculation
-    std::atomic<uint64_t> total_bytes_transferred{0};
+    std::atomic<uint64_t> total_bytes_sent{0};        // Total bytes uploaded (PUT)
+    std::atomic<uint64_t> total_bytes_received{0};    // Total bytes downloaded (GET)
     std::atomic<uint64_t> total_transfer_time_ms{0};
     
     // Request history
@@ -53,7 +54,8 @@ struct ClientMetrics {
           transfer_latency_ms(other.transfer_latency_ms),
           total_requests(other.total_requests.load()),
           failed_requests(other.failed_requests.load()),
-          total_bytes_transferred(other.total_bytes_transferred.load()),
+          total_bytes_sent(other.total_bytes_sent.load()),
+          total_bytes_received(other.total_bytes_received.load()),
           total_transfer_time_ms(other.total_transfer_time_ms.load()),
           request_history(other.request_history) {
     }
@@ -66,7 +68,8 @@ struct ClientMetrics {
             transfer_latency_ms = other.transfer_latency_ms;
             total_requests.store(other.total_requests.load());
             failed_requests.store(other.failed_requests.load());
-            total_bytes_transferred.store(other.total_bytes_transferred.load());
+            total_bytes_sent.store(other.total_bytes_sent.load());
+            total_bytes_received.store(other.total_bytes_received.load());
             total_transfer_time_ms.store(other.total_transfer_time_ms.load());
             request_history = other.request_history;
         }

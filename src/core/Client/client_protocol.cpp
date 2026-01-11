@@ -111,17 +111,17 @@ std::vector<std::string> ClientProtocol::requestFileList() {
     return fileList;
 }
 
-void ClientProtocol::request_get(const std::string &filename, const std::string &save_dir) {
+bool ClientProtocol::request_get(const std::string &filename, const std::string &save_dir) {
     if (!socket_.isConnected()) {
         std::cerr << "[Protocol] Not connected to server\n";
-        return;
+        return false;
     }
 
     // Send GET command
     uint8_t cmd = CMD_GET;
     if (socket_.sendData(&cmd, sizeof(cmd)) < 0) {
         std::cerr << "[Protocol] Failed to send GET command\n";
-        return;
+        return false;
     }
 
     // Send filename
@@ -129,19 +129,19 @@ void ClientProtocol::request_get(const std::string &filename, const std::string 
     std::strncpy(filenameBuf, filename.c_str(), sizeof(filenameBuf) - 1);
     if (socket_.sendData(reinterpret_cast<uint8_t*>(filenameBuf), sizeof(filenameBuf)) < 0) {
         std::cerr << "[Protocol] Failed to send filename\n";
-        return;
+        return false;
     }
 
     // Receive file size
     uint64_t fileSize = 0;
     if (socket_.receiveData(reinterpret_cast<uint8_t*>(&fileSize), sizeof(fileSize)) < 0) {
         std::cerr << "[Protocol] Failed to receive file size\n";
-        return;
+        return false;
     }
 
     if (fileSize == 0) {
         std::cerr << "[Protocol] File not found on server\n";
-        return;
+        return false;
     }
 
     // Create output file path
@@ -149,17 +149,18 @@ void ClientProtocol::request_get(const std::string &filename, const std::string 
     std::ofstream outFile(outputPath, std::ios::binary);
     if (!outFile) {
         std::cerr << "[Protocol] Failed to create file: " << outputPath << "\n";
-        return;
+        return false;
     }
 
     std::cout << "[Protocol] Downloading " << filename << " (" << fileSize << " bytes)\n";
 
     // Receive file data
-    const size_t BUFFER_SIZE = 8192;
+    const size_t BUFFER_SIZE = 1024*64;
     uint8_t buffer[BUFFER_SIZE];
     uint64_t totalReceived = 0;
     
     auto startTime = std::chrono::high_resolution_clock::now();
+    auto lastUpdateTime = startTime;
 
     while (totalReceived < fileSize) {
         size_t toReceive = std::min(BUFFER_SIZE, static_cast<size_t>(fileSize - totalReceived));
@@ -168,11 +169,29 @@ void ClientProtocol::request_get(const std::string &filename, const std::string 
         if (received <= 0) {
             std::cerr << "[Protocol] Failed to receive file data\n";
             outFile.close();
-            return;
+            return false;
         }
 
         outFile.write(reinterpret_cast<char*>(buffer), received);
         totalReceived += received;
+
+        // Update metrics in real-time every 100ms
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastUpdateTime);
+        
+        if (elapsed.count() >= 100 || totalReceived == fileSize) {
+            auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
+            
+            if (metrics_ && totalElapsed.count() > 0) {
+                // Calculate current throughput in kbps
+                double currentThroughput = (totalReceived * 8.0) / totalElapsed.count();
+                metrics_->throughput_kbps = currentThroughput;
+                metrics_->transfer_latency_ms = totalElapsed.count();
+                // Note: total_bytes_received is updated in final update to avoid double counting
+            }
+            
+            lastUpdateTime = currentTime;
+        }
 
         // Progress indicator
         if (totalReceived % (1024 * 1024) == 0 || totalReceived == fileSize) {
@@ -184,34 +203,49 @@ void ClientProtocol::request_get(const std::string &filename, const std::string 
     outFile.close();
     
     auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+    uint64_t duration_ms = duration.count() / 1000;  // Convert to milliseconds
+    
+    // For very fast transfers, ensure at least 1ms is recorded
+    if (duration_ms == 0 && duration.count() > 0) {
+        duration_ms = 1;
+    }
+    
+    std::cout << "[Protocol DEBUG] Transfer duration: " << duration.count() << " us (" << duration_ms << " ms)" << std::endl;
+    std::cout << "[Protocol DEBUG] metrics_ pointer: " << (metrics_ ? "valid" : "NULL") << std::endl;
     
     // Update metrics
     if (metrics_) {
-        metrics_->transfer_latency_ms = duration.count();
-        metrics_->total_bytes_transferred += fileSize;
-        metrics_->total_transfer_time_ms += duration.count();
+        metrics_->transfer_latency_ms = duration_ms;
+        metrics_->total_bytes_received += fileSize;  // Downloaded bytes
+        metrics_->total_transfer_time_ms += duration_ms;
+        
+        std::cout << "[Protocol DEBUG] Updated total_transfer_time_ms: " 
+                  << metrics_->total_transfer_time_ms.load() << " ms" << std::endl;
         
         // Calculate average throughput across all transfers
         uint64_t total_time = metrics_->total_transfer_time_ms.load();
         if (total_time > 0) {
-            uint64_t total_bytes = metrics_->total_bytes_transferred.load();
+            uint64_t total_bytes = metrics_->total_bytes_sent.load() + metrics_->total_bytes_received.load();
             metrics_->throughput_kbps = (total_bytes * 8.0) / total_time;
         }
+    } else {
+        std::cout << "[Protocol DEBUG] metrics_ is NULL - cannot update!" << std::endl;
     }
+    return true;
 }
 
-void ClientProtocol::request_put(const std::string &filepath) {
+bool ClientProtocol::request_put(const std::string &filepath) {
     if (!socket_.isConnected()) {
         std::cerr << "[Protocol] Not connected to server\n";
-        return;
+        return false;
     }
 
     // Check if file exists
     struct stat fileStat;
     if (stat(filepath.c_str(), &fileStat) != 0) {
         std::cerr << "[Protocol] File not found: " << filepath << "\n";
-        return;
+        return false;
     }
 
     uint64_t fileSize = fileStat.st_size;
@@ -224,14 +258,14 @@ void ClientProtocol::request_put(const std::string &filepath) {
     std::ifstream inFile(filepath, std::ios::binary);
     if (!inFile) {
         std::cerr << "[Protocol] Failed to open file: " << filepath << "\n";
-        return;
+        return false;
     }
 
     // Send PUT command
     uint8_t cmd = CMD_PUT;
     if (socket_.sendData(&cmd, sizeof(cmd)) < 0) {
         std::cerr << "[Protocol] Failed to send PUT command\n";
-        return;
+        return false;
     }
 
     // Send filename
@@ -239,23 +273,24 @@ void ClientProtocol::request_put(const std::string &filepath) {
     std::strncpy(filenameBuf, filename.c_str(), sizeof(filenameBuf) - 1);
     if (socket_.sendData(reinterpret_cast<uint8_t*>(filenameBuf), sizeof(filenameBuf)) < 0) {
         std::cerr << "[Protocol] Failed to send filename\n";
-        return;
+        return false;
     }
 
     // Send file size
     if (socket_.sendData(reinterpret_cast<uint8_t*>(&fileSize), sizeof(fileSize)) < 0) {
         std::cerr << "[Protocol] Failed to send file size\n";
-        return;
+        return false;
     }
 
     std::cout << "[Protocol] Uploading " << filename << " (" << fileSize << " bytes)\n";
 
     // Send file data
-    const size_t BUFFER_SIZE = 8192;
+    const size_t BUFFER_SIZE = 64*1024;
     char buffer[BUFFER_SIZE];
     uint64_t totalSent = 0;
     
     auto startTime = std::chrono::high_resolution_clock::now();
+    auto lastUpdateTime = startTime;
 
     while (inFile && totalSent < fileSize) {
         inFile.read(buffer, BUFFER_SIZE);
@@ -264,10 +299,28 @@ void ClientProtocol::request_put(const std::string &filepath) {
         if (socket_.sendData(reinterpret_cast<uint8_t*>(buffer), bytesRead) < 0) {
             std::cerr << "[Protocol] Failed to send file data\n";
             inFile.close();
-            return;
+            return false;
         }
 
         totalSent += bytesRead;
+
+        // Update metrics in real-time every 100ms
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastUpdateTime);
+        
+        if (elapsed.count() >= 100 || totalSent == fileSize) {
+            auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
+            
+            if (metrics_ && totalElapsed.count() > 0) {
+                // Calculate current throughput in kbps
+                double currentThroughput = (totalSent * 8.0) / totalElapsed.count();
+                metrics_->throughput_kbps = currentThroughput;
+                metrics_->transfer_latency_ms = totalElapsed.count();
+                // Note: total_bytes_sent is updated in final update to avoid double counting
+            }
+            
+            lastUpdateTime = currentTime;
+        }
 
         // Progress indicator
         if (totalSent % (1024 * 1024) == 0 || totalSent == fileSize) {
@@ -279,19 +332,26 @@ void ClientProtocol::request_put(const std::string &filepath) {
     inFile.close();
     
     auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+    uint64_t duration_ms = duration.count() / 1000;  // Convert to milliseconds
+    
+    // For very fast transfers, ensure at least 1ms is recorded
+    if (duration_ms == 0 && duration.count() > 0) {
+        duration_ms = 1;
+    }
     
     // Update metrics
     if (metrics_) {
-        metrics_->transfer_latency_ms = duration.count();
-        metrics_->total_bytes_transferred += fileSize;
-        metrics_->total_transfer_time_ms += duration.count();
+        metrics_->transfer_latency_ms = duration_ms;
+        metrics_->total_bytes_sent += fileSize;  // Uploaded bytes
+        metrics_->total_transfer_time_ms += duration_ms;
         
         // Calculate average throughput across all transfers
         uint64_t total_time = metrics_->total_transfer_time_ms.load();
         if (total_time > 0) {
-            uint64_t total_bytes = metrics_->total_bytes_transferred.load();
+            uint64_t total_bytes = metrics_->total_bytes_sent.load() + metrics_->total_bytes_received.load();
             metrics_->throughput_kbps = (total_bytes * 8.0) / total_time;
         }
     }
+    return true;
 }

@@ -23,7 +23,7 @@ ServerWindow::ServerWindow(QWidget *parent)
     // Setup status update timer
     statusTimer = new QTimer(this);
     connect(statusTimer, &QTimer::timeout, this, &ServerWindow::updateStatus);
-    statusTimer->start(1000); // Update every second
+    statusTimer->start(500); // Update every 500ms for faster real-time updates
     
     // Auto-start server on port 9000
     startServer(9000, "./shared");

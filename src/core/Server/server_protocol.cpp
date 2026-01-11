@@ -112,10 +112,20 @@ bool ServerProtocol::handleGetCommand(int clientFd) {
         return false;
     }
 
-    // Clean filename (remove trailing null/whitespace)
+    // Extract filename (stop at first null character, preserving spaces)
     std::string filename(filenameBuf);
-    // Remove null characters and trim
-    filename = filename.c_str(); // This stops at first null
+    // Find actual end of string (first null character)
+    size_t actualLen = 0;
+    for (size_t i = 0; i < sizeof(filenameBuf); ++i) {
+        if (filenameBuf[i] == '\0') {
+            actualLen = i;
+            break;
+        }
+    }
+    if (actualLen > 0) {
+        filename = std::string(filenameBuf, actualLen);
+    }
+    
     std::cout << "[Protocol] Client requested file: '" << filename << "' (length: " << filename.length() << ")\n";
 
     return sendFile(clientFd, filename);
@@ -138,9 +148,20 @@ bool ServerProtocol::handlePutCommand(int clientFd) {
         return false;
     }
 
-    // Clean filename
+    // Extract filename (stop at first null character, preserving spaces)
     std::string filename(filenameBuf);
-    filename = filename.c_str(); // Stop at first null
+    // Find actual end of string (first null character)
+    size_t actualLen = 0;
+    for (size_t i = 0; i < sizeof(filenameBuf); ++i) {
+        if (filenameBuf[i] == '\0') {
+            actualLen = i;
+            break;
+        }
+    }
+    if (actualLen > 0) {
+        filename = std::string(filenameBuf, actualLen);
+    }
+    
     std::cout << "[Protocol] Receiving file: '" << filename << "' (" << fileSize << " bytes)\n";
 
     return receiveFile(clientFd, filename, fileSize);
@@ -220,11 +241,12 @@ bool ServerProtocol::sendFile(int clientFd, const std::string& filename) {
     }
 
     // Send file data
-    const size_t BUFFER_SIZE = 8192;
+    const size_t BUFFER_SIZE = 64*1024;
     char buffer[BUFFER_SIZE];
     uint64_t totalSent = 0;
     
     auto startTime = std::chrono::high_resolution_clock::now();
+    auto lastUpdateTime = startTime;
 
     while (file && totalSent < fileSize) {
         file.read(buffer, BUFFER_SIZE);
@@ -237,6 +259,20 @@ bool ServerProtocol::sendFile(int clientFd, const std::string& filename) {
         }
 
         totalSent += bytesRead;
+        
+        // Update metrics in real-time every 100ms
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastUpdateTime);
+        
+        if (elapsed.count() >= 100 || totalSent == fileSize) {
+            auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
+            
+            if (metrics_ && totalElapsed.count() > 0) {
+                metrics_->updateThroughput(totalSent, totalElapsed.count());
+            }
+            
+            lastUpdateTime = currentTime;
+        }
     }
 
     file.close();
@@ -271,11 +307,12 @@ bool ServerProtocol::receiveFile(int clientFd, const std::string& filename, uint
     }
 
     // Receive file data
-    const size_t BUFFER_SIZE = 8192;
+    const size_t BUFFER_SIZE = 64*1024;
     uint8_t buffer[BUFFER_SIZE];
     uint64_t totalReceived = 0;
     
     auto startTime = std::chrono::high_resolution_clock::now();
+    auto lastUpdateTime = startTime;
 
     while (totalReceived < fileSize) {
         size_t toReceive = std::min(BUFFER_SIZE, static_cast<size_t>(fileSize - totalReceived));
@@ -291,6 +328,20 @@ bool ServerProtocol::receiveFile(int clientFd, const std::string& filename, uint
 
         file.write(reinterpret_cast<char*>(buffer), received);
         totalReceived += received;
+        
+        // Update metrics in real-time every 100ms
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastUpdateTime);
+        
+        if (elapsed.count() >= 100 || totalReceived == fileSize) {
+            auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
+            
+            if (metrics_ && totalElapsed.count() > 0) {
+                metrics_->updateThroughput(totalReceived, totalElapsed.count());
+            }
+            
+            lastUpdateTime = currentTime;
+        }
     }
 
     file.close();

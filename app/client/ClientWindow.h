@@ -32,7 +32,7 @@ private slots:
     void onListFilesClicked();
     void onDownloadClicked();
     void onUploadClicked();
-    void onMetricsClicked();
+    void onResetMetricsClicked();
     void onExportClicked();
     void onQuitClicked();
     void updateStatus();

@@ -17,7 +17,7 @@ ClientWindow::ClientWindow(QWidget *parent)
     // Setup status update timer
     statusTimer = new QTimer(this);
     connect(statusTimer, &QTimer::timeout, this, &ClientWindow::updateStatus);
-    statusTimer->start(1000); // Update every second
+    statusTimer->start(500); // Update every 500ms for faster real-time updates
 }
 
 ClientWindow::~ClientWindow() {
@@ -260,9 +260,9 @@ void ClientWindow::setupUI() {
     connect(uploadButton, &QPushButton::clicked, this, &ClientWindow::onUploadClicked);
     buttonsRow2->addWidget(uploadButton);
     
-    metricsButton = new QPushButton("Metrics", this);
+    metricsButton = new QPushButton("Reset Metrics", this);
     metricsButton->setEnabled(false);
-    connect(metricsButton, &QPushButton::clicked, this, &ClientWindow::onMetricsClicked);
+    connect(metricsButton, &QPushButton::clicked, this, &ClientWindow::onResetMetricsClicked);
     buttonsRow2->addWidget(metricsButton);
     
     exportButton = new QPushButton("Export CSV", this);
@@ -296,12 +296,12 @@ void ClientWindow::setupUI() {
     filesDownloadedLabel->setStyleSheet("QLabel { font-weight: normal; }");
     metricsLayout->addWidget(filesDownloadedLabel, 1, 3);
     
-    metricsLayout->addWidget(new QLabel("Avg Throughput:", this), 2, 0);
+    metricsLayout->addWidget(new QLabel("Avg Throughput (Sent):", this), 2, 0);
     avgThroughputSentLabel = new QLabel("0.00 Mbps", this);
     avgThroughputSentLabel->setStyleSheet("QLabel { font-weight: normal; }");
     metricsLayout->addWidget(avgThroughputSentLabel, 2, 1);
     
-    metricsLayout->addWidget(new QLabel("Avg Throughput:", this), 2, 2);
+    metricsLayout->addWidget(new QLabel("Avg Throughput (Recv):", this), 2, 2);
     avgThroughputRecvLabel = new QLabel("0.00 Mbps", this);
     avgThroughputRecvLabel->setStyleSheet("QLabel { font-weight: normal; }");
     metricsLayout->addWidget(avgThroughputRecvLabel, 2, 3);
@@ -398,7 +398,8 @@ void ClientWindow::processCommand(const QString& command) {
             appendLog("Not connected to server", false);
             return;
         }
-        QString filename = parts[1];
+        // Get filename (may contain spaces) - everything after "get "
+        QString filename = command.mid(4).trimmed(); // Remove "get " prefix
         QString saveDir = QFileDialog::getExistingDirectory(this, "Select Download Directory", ".");
         if (!saveDir.isEmpty()) {
             appendLog(QString("Downloading %1...").arg(filename), true);
@@ -418,15 +419,16 @@ void ClientWindow::processCommand(const QString& command) {
             appendLog("Not connected to server", false);
             return;
         }
-        QString filepath = parts[1];
+        // Get filepath (may contain spaces) - everything after "put "
+        QString filepath = command.mid(4).trimmed(); // Remove "put " prefix
         if (client->putFile(filepath.toStdString())) {
             appendLog(QString("Uploaded: %1").arg(filepath), true);
         } else {
             appendLog(QString("Upload failed: %1").arg(filepath), false);
         }
     }
-    else if (cmd == "metrics") {
-        onMetricsClicked();
+    else if (cmd == "reset") {
+        onResetMetricsClicked();
     }
     else {
         appendLog("Unknown command: " + cmd, false);
@@ -532,16 +534,26 @@ void ClientWindow::onDownloadClicked() {
     }
     
     QString filename = item->text();
-    // Remove emoji prefix if exists
-    if (filename.contains(" ")) {
-        filename = filename.split(" ").last();
+    // Remove emoji prefix if exists - check for all possible emoji types
+    if (filename.contains(" ") && (
+        filename.startsWith("📄 ") || 
+        filename.startsWith("📁 ") || 
+        filename.startsWith("🖼 ") || 
+        filename.startsWith("📊 ") || 
+        filename.startsWith("📝 ") || 
+        filename.startsWith("📦 "))) {
+        // Find first space and take everything after it
+        int spaceIndex = filename.indexOf(" ");
+        if (spaceIndex > 0) {
+            filename = filename.mid(spaceIndex + 1).trimmed();
+        }
     }
     
     QString saveDir = QFileDialog::getExistingDirectory(this, "Select Download Directory", ".");
     if (!saveDir.isEmpty()) {
         appendLog(QString("Downloading %1...").arg(filename), true);
         if (client->getFile(filename.toStdString(), saveDir.toStdString())) {
-            appendLog(QString("Download completed: %1 (2.3MB) in 0.42s").arg(filename), true);
+            appendLog(QString("Download completed: %1").arg(filename), true);
         } else {
             appendLog(QString("Download failed: %1").arg(filename), false);
         }
@@ -566,25 +578,10 @@ void ClientWindow::onUploadClicked() {
     }
 }
 
-void ClientWindow::onMetricsClicked() {
-    const ClientMetrics& metrics = client->getMetrics();
-    
-    QString metricsText = QString(
-        "\n=== Client Metrics ===\n"
-        "RTT: %1 ms\n"
-        "Throughput: %2 kbps\n"
-        "Packet Loss: %3%\n"
-        "Total Requests: %4\n"
-        "Failed Requests: %5\n"
-        "Total Bytes: %6 bytes\n"
-    ).arg(metrics.rtt_ms)
-     .arg(metrics.throughput_kbps)
-     .arg(metrics.packet_loss_rate)
-     .arg(metrics.total_requests.load())
-     .arg(metrics.failed_requests.load())
-     .arg(metrics.total_bytes_transferred.load());
-    
-    appendLog(metricsText, true);
+void ClientWindow::onResetMetricsClicked() {
+    client->resetMetrics();
+    updateMetrics();
+    appendLog("Metrics have been reset", true);
 }
 
 void ClientWindow::onExportClicked() {
@@ -667,11 +664,11 @@ void ClientWindow::updateStatusBar() {
 void ClientWindow::updateMetrics() {
     const ClientMetrics& metrics = client->getMetrics();
     
-    double bytesSent = metrics.total_bytes_transferred.load();
-    double bytesReceived = metrics.total_bytes_transferred.load();
+    double bytesSent = metrics.total_bytes_sent.load();
+    double bytesReceived = metrics.total_bytes_received.load();
     
-    bytesSentLabel->setText(QString("%1 MB").arg(bytesSent / 1024.0 / 1024.0, 0, 'f', 2));
-    bytesReceivedLabel->setText(QString("%1 MB").arg(bytesReceived / 1024.0 / 1024.0, 0, 'f', 2));
+    bytesSentLabel->setText(QString("%1 KB").arg(bytesSent / 1024.0, 0, 'f', 2));
+    bytesReceivedLabel->setText(QString("%1 KB").arg(bytesReceived / 1024.0, 0, 'f', 2));
     
     // Count uploads/downloads from history
     int uploads = 0, downloads = 0;
@@ -683,10 +680,30 @@ void ClientWindow::updateMetrics() {
     filesUploadedLabel->setText(QString::number(uploads));
     filesDownloadedLabel->setText(QString::number(downloads));
     
-    // Throughput in Mbps (convert from kbps)
-    double throughputMbps = metrics.throughput_kbps / 1000.0;
-    avgThroughputSentLabel->setText(QString("%1 Mbps").arg(throughputMbps, 0, 'f', 2));
-    avgThroughputRecvLabel->setText(QString("%1 Mbps").arg(throughputMbps, 0, 'f', 2));
+    // Calculate separate throughput for sent and received in Mbps
+    uint64_t total_time = metrics.total_transfer_time_ms.load();
+    double throughputSentMbps = 0.0;
+    double throughputRecvMbps = 0.0;
+    
+    std::cout << "[DEBUG] Total time: " << total_time << " ms" << std::endl;
+    
+    if (total_time > 0) {
+        // Calculate upload throughput: (bytes * 8) / (time_ms * 1000) = Mbps
+        throughputSentMbps = (bytesSent * 8.0) / (total_time * 1000.0);
+        // Calculate download throughput: (bytes * 8) / (time_ms * 1000) = Mbps
+        throughputRecvMbps = (bytesReceived * 8.0) / (total_time * 1000.0);
+        std::cout << "[DEBUG] Throughput calculated: Sent=" << throughputSentMbps 
+                  << " Mbps, Recv=" << throughputRecvMbps << " Mbps" << std::endl;
+    } else {
+        std::cout << "[DEBUG] Total time is 0, throughput cannot be calculated" << std::endl;
+    }
+    
+    // Update labels with current values
+    avgThroughputSentLabel->setText(QString("%1 Mbps").arg(throughputSentMbps, 0, 'f', 2));
+    avgThroughputRecvLabel->setText(QString("%1 Mbps").arg(throughputRecvMbps, 0, 'f', 2));
+    
+    std::cout << "[DEBUG] Label updated - Sent: " << avgThroughputSentLabel->text().toStdString() 
+              << ", Recv: " << avgThroughputRecvLabel->text().toStdString() << std::endl;
     
     // Packet loss rate with failed/total
     uint64_t total = metrics.total_requests.load();

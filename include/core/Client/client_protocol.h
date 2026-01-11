@@ -15,9 +15,9 @@ public:
 
     void request_list();
     std::vector<std::string> requestFileList();
-    void request_get(const std::string &filename, 
+    bool request_get(const std::string &filename, 
                      const std::string &save_dir); 
-    void request_put(const std::string &filepath);
+    bool request_put(const std::string &filepath);
 
 private: 
     ClientSocket &socket_;

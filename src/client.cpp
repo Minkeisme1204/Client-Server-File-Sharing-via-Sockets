@@ -167,7 +167,14 @@ bool Client::getFile(const std::string& filename, const std::string& saveDir) {
         metrics_.total_requests++;
         auto startTime = std::chrono::high_resolution_clock::now();
         
-        protocol_->request_get(filename, saveDir);
+        bool success = protocol_->request_get(filename, saveDir);
+        
+        if (!success) {
+            metrics_.failed_requests++;
+            metrics_.request_history.emplace_back("GET", filename, false, 0, 0.0, "Download failed");
+            logOperation("get:" + filename, false);
+            return false;
+        }
         
         auto endTime = std::chrono::high_resolution_clock::now();
         auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
@@ -180,9 +187,6 @@ bool Client::getFile(const std::string& filename, const std::string& saveDir) {
             metrics_.rtt_ms = (metrics_.rtt_ms * 0.7) + (duration_ms * 0.3);
         }
         metrics_.transfer_latency_ms = duration_ms;
-        
-        // Calculate throughput (simplified - would need actual file size)
-        // metrics_.throughput_kbps = (fileSize * 8.0) / (duration.count() / 1000.0) / 1024.0;
         
         // Log to history
         metrics_.request_history.emplace_back("GET", filename, true, 0, duration_ms);
@@ -213,7 +217,15 @@ bool Client::putFile(const std::string& filepath) {
         metrics_.total_requests++;
         auto startTime = std::chrono::high_resolution_clock::now();
         
-        protocol_->request_put(filepath);
+        bool success = protocol_->request_put(filepath);
+        
+        if (!success) {
+            metrics_.failed_requests++;
+            std::string filename = filepath.substr(filepath.find_last_of("/\\") + 1);
+            metrics_.request_history.emplace_back("PUT", filename, false, 0, 0.0, "Upload failed");
+            logOperation("put:" + filepath, false);
+            return false;
+        }
         
         auto endTime = std::chrono::high_resolution_clock::now();
         auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
@@ -387,11 +399,19 @@ void Client::setVerbose(bool enable) {
 
 // Private Helper Methods
 void Client::updateMetrics() {
-    // This method can be extended to update more sophisticated metrics
-    // For now, it's a placeholder for future enhancements
+    // Update packet loss rate
+    uint64_t total = metrics_.total_requests.load();
+    uint64_t failed = metrics_.failed_requests.load();
+    
+    if (total > 0) {
+        metrics_.packet_loss_rate = (failed * 100.0) / total;
+    } else {
+        metrics_.packet_loss_rate = 0.0;
+    }
     
     if (verbose_) {
-        std::cout << "[Client] Metrics updated\n";
+        std::cout << "[Client] Metrics updated - RTT: " << metrics_.rtt_ms 
+                  << "ms, Throughput: " << metrics_.throughput_kbps << " kbps\n";
     }
 }
 
