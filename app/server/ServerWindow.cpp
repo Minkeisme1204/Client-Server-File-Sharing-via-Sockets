@@ -30,7 +30,34 @@ ServerWindow::ServerWindow(QWidget *parent)
 }
 
 ServerWindow::~ServerWindow() {
-    stopServer();
+    // Stop timer first to prevent updates during shutdown
+    if (statusTimer) {
+        statusTimer->stop();
+    }
+    
+    // Stop server gracefully
+    if (server && server->isRunning()) {
+        server->stop();
+    }
+    
+    // Clean up thread - do NOT terminate, just detach
+    if (serverThread) {
+        if (serverThread->isRunning()) {
+            // Wait briefly
+            serverThread->wait(1000);
+            if (serverThread->isRunning()) {
+                // Still running, just abandon it (will be cleaned by OS)
+                // Do NOT call terminate() - causes coredump
+                serverThread = nullptr;
+            } else {
+                delete serverThread;
+                serverThread = nullptr;
+            }
+        } else {
+            delete serverThread;
+            serverThread = nullptr;
+        }
+    }
 }
 
 void ServerWindow::setupUI() {
@@ -393,19 +420,41 @@ void ServerWindow::stopServer() {
     }
     
     appendLog("Stopping server...", "orange");
-    server->stop();
     
-    if (serverThread) {
-        serverThread->wait(3000);
-        if (serverThread->isRunning()) {
-            serverThread->terminate();
-            serverThread->wait();
-        }
-        delete serverThread;
-        serverThread = nullptr;
+    // Disable stop button to prevent double-click
+    if (stopServerButton) {
+        stopServerButton->setEnabled(false);
     }
     
-    appendLog("Server stopped", "red");
+    // Stop server in background thread to avoid blocking GUI
+    QTimer::singleShot(0, this, [this]() {
+        // Stop server first (this will set running_ = false and close socket)
+        server->stop();
+        
+        // Wait for server thread to finish gracefully
+        if (serverThread) {
+            // Give time for graceful shutdown (reduced to 2s)
+            if (!serverThread->wait(2000)) {
+                // If still running, just detach and let it finish naturally
+                // DO NOT use terminate() - it's unsafe and causes coredump
+                appendLog("Server thread still running, detaching...", "orange");
+                // Thread will be cleaned up when process exits
+                // Set to nullptr without delete to avoid double-free
+                serverThread = nullptr;
+            } else {
+                // Thread finished gracefully, safe to delete
+                delete serverThread;
+                serverThread = nullptr;
+            }
+        }
+        
+        appendLog("Server stopped", "red");
+        
+        // Re-enable button
+        if (stopServerButton) {
+            stopServerButton->setEnabled(true);
+        }
+    });
 }
 
 void ServerWindow::onExecuteCommand() {

@@ -85,6 +85,7 @@ private:
     QString currentIP;
     int currentPort;
     QDateTime connectionStartTime;
+    bool wasConnected;  // Track previous connection state to detect disconnects
 };
 
 #endif // CLIENTWINDOW_H

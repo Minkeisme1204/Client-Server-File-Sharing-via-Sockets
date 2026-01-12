@@ -18,7 +18,18 @@ Server::Server()
 }
 
 Server::~Server() {
-    stop();
+    if (running_) {
+        stop();
+    }
+    
+    // Ensure thread is cleaned up
+    if (acceptThread_ && acceptThread_->joinable()) {
+        try {
+            acceptThread_->join();
+        } catch (...) {
+            // Ignore exceptions during cleanup
+        }
+    }
 }
 
 bool Server::start(uint16_t port, const std::string& sharedDir) {
@@ -60,16 +71,8 @@ void Server::stop() {
 
     // Set running flag to false first
     running_ = false;
-
-    // Close socket to unblock accept()
-    socket_->close();
-
-    // Wait for accept thread to finish (with timeout)
-    if (acceptThread_ && acceptThread_->joinable()) {
-        acceptThread_->join();
-    }
-
-    // Stop all client sessions
+    
+    // Stop all client sessions first
     {
         std::lock_guard<std::mutex> lock(sessionsMutex_);
         for (auto& session : sessions_) {
@@ -78,6 +81,20 @@ void Server::stop() {
             }
         }
         sessions_.clear();
+    }
+
+    // Close socket to unblock accept()
+    if (socket_) {
+        socket_->close();
+    }
+
+    // Wait for accept thread to finish (with timeout)
+    if (acceptThread_ && acceptThread_->joinable()) {
+        try {
+            acceptThread_->join();
+        } catch (const std::exception& e) {
+            std::cerr << "[Server] Error joining accept thread: " << e.what() << "\n";
+        }
     }
 
     if (verbose_) {

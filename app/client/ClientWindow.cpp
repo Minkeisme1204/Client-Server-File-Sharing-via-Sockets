@@ -11,7 +11,7 @@
 #include <iostream>
 
 ClientWindow::ClientWindow(QWidget *parent)
-    : QMainWindow(parent), client(std::make_unique<Client>()), currentPort(0) {
+    : QMainWindow(parent), client(std::make_unique<Client>()), currentPort(0), wasConnected(false) {
     setupUI();
     
     // Setup status update timer
@@ -340,19 +340,44 @@ void ClientWindow::appendLog(const QString& text, bool success) {
 void ClientWindow::connectToServer(const QString& ip, int port) {
     if (client->isConnected()) {
         appendLog("Already connected. Disconnect first.", false);
+        QMessageBox::warning(this, "Already Connected", "You are already connected to a server.\nDisconnect first before connecting to another server.");
         return;
     }
     
     appendLog(QString("Connecting to %1:%2...").arg(ip).arg(port), true);
     
     if (client->connect(ip.toStdString(), static_cast<uint16_t>(port))) {
+        // Connection successful - verify by testing a simple operation
+        // Try to get file list to confirm server is actually responding
+        std::vector<std::string> testList = client->getFileList();
+        
+        // Check if we got a valid response
+        if (testList.empty() && !client->isConnected()) {
+            // Connection dropped immediately - server not running properly
+            appendLog("Connection failed: Server not responding", false);
+            QMessageBox::critical(this, "Connection Failed", 
+                QString("Failed to connect to %1:%2\n\nPossible reasons:\n"
+                        "• Server is not running\n"
+                        "• Server rejected the connection\n"
+                        "• Network issue").arg(ip).arg(port));
+            return;
+        }
+        
         currentIP = ip;
         currentPort = port;
         connectionStartTime = QDateTime::currentDateTime();
-        appendLog(QString("Connected to %1:%2").arg(ip).arg(port), true);
+        appendLog(QString("✓ Successfully connected to %1:%2").arg(ip).arg(port), true);
         appendLog("Use 'List Files' button to view available files", true);
+        QMessageBox::information(this, "Connected", 
+            QString("Successfully connected to server\n%1:%2").arg(ip).arg(port));
     } else {
-        appendLog("Connection failed", false);
+        appendLog("✗ Connection failed: Unable to reach server", false);
+        QMessageBox::critical(this, "Connection Failed", 
+            QString("Failed to connect to %1:%2\n\nPossible reasons:\n"
+                    "• Server is not running\n"
+                    "• Incorrect IP address or port\n"
+                    "• Firewall blocking connection\n"
+                    "• Network issue").arg(ip).arg(port));
     }
 }
 
@@ -612,7 +637,22 @@ void ClientWindow::updateStatus() {
 }
 
 void ClientWindow::updateStatusBar() {
-    if (client->isConnected()) {
+    bool currentlyConnected = client->isConnected();
+    
+    // Detect server disconnect
+    if (wasConnected && !currentlyConnected) {
+        // Connection was lost
+        appendLog("✗ Connection lost: Server disconnected", false);
+        QMessageBox::warning(this, "Connection Lost", 
+            QString("Lost connection to server %1:%2\n\nThe server may have stopped or network issue occurred.")
+            .arg(currentIP).arg(currentPort));
+        currentIP.clear();
+        currentPort = 0;
+    }
+    
+    wasConnected = currentlyConnected;
+    
+    if (currentlyConnected) {
         statusLabel->setText(QString("Status: Running"));
         statusLabel->setObjectName("statusBar");
         statusLabel->setStyleSheet("QLabel { background-color: #4CAF50; color: white; padding: 8px; font-weight: bold; }");
@@ -701,9 +741,6 @@ void ClientWindow::updateMetrics() {
     // Update labels with current values
     avgThroughputSentLabel->setText(QString("%1 Mbps").arg(throughputSentMbps, 0, 'f', 2));
     avgThroughputRecvLabel->setText(QString("%1 Mbps").arg(throughputRecvMbps, 0, 'f', 2));
-    
-    std::cout << "[DEBUG] Label updated - Sent: " << avgThroughputSentLabel->text().toStdString() 
-              << ", Recv: " << avgThroughputRecvLabel->text().toStdString() << std::endl;
     
     // Packet loss rate with failed/total
     uint64_t total = metrics.total_requests.load();
