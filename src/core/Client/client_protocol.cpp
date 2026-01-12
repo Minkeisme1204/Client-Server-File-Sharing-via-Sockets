@@ -117,6 +117,9 @@ bool ClientProtocol::request_get(const std::string &filename, const std::string 
         return false;
     }
 
+    // Measure RTT: time from sending command to receiving first response
+    auto rttStart = std::chrono::high_resolution_clock::now();
+    
     // Send GET command
     uint8_t cmd = CMD_GET;
     if (socket_.sendData(&cmd, sizeof(cmd)) < 0) {
@@ -137,6 +140,20 @@ bool ClientProtocol::request_get(const std::string &filename, const std::string 
     if (socket_.receiveData(reinterpret_cast<uint8_t*>(&fileSize), sizeof(fileSize)) < 0) {
         std::cerr << "[Protocol] Failed to receive file size\n";
         return false;
+    }
+    
+    // Calculate and update RTT
+    auto rttEnd = std::chrono::high_resolution_clock::now();
+    auto rttDuration = std::chrono::duration_cast<std::chrono::microseconds>(rttEnd - rttStart);
+    double rtt_ms = rttDuration.count() / 1000.0;
+    
+    if (metrics_) {
+        // Exponential moving average: 70% old + 30% new
+        if (metrics_->rtt_ms == 0.0) {
+            metrics_->rtt_ms = rtt_ms;
+        } else {
+            metrics_->rtt_ms = (metrics_->rtt_ms * 0.7) + (rtt_ms * 0.3);
+        }
     }
 
     if (fileSize == 0) {
@@ -261,6 +278,9 @@ bool ClientProtocol::request_put(const std::string &filepath) {
         return false;
     }
 
+    // Measure RTT: time to send command and metadata (server processing time)
+    auto rttStart = std::chrono::high_resolution_clock::now();
+    
     // Send PUT command
     uint8_t cmd = CMD_PUT;
     if (socket_.sendData(&cmd, sizeof(cmd)) < 0) {
@@ -280,6 +300,20 @@ bool ClientProtocol::request_put(const std::string &filepath) {
     if (socket_.sendData(reinterpret_cast<uint8_t*>(&fileSize), sizeof(fileSize)) < 0) {
         std::cerr << "[Protocol] Failed to send file size\n";
         return false;
+    }
+    
+    // RTT measured: command sent, server ready to receive
+    auto rttEnd = std::chrono::high_resolution_clock::now();
+    auto rttDuration = std::chrono::duration_cast<std::chrono::microseconds>(rttEnd - rttStart);
+    double rtt_ms = rttDuration.count() / 1000.0;
+    
+    if (metrics_) {
+        // Exponential moving average: 70% old + 30% new
+        if (metrics_->rtt_ms == 0.0) {
+            metrics_->rtt_ms = rtt_ms;
+        } else {
+            metrics_->rtt_ms = (metrics_->rtt_ms * 0.7) + (rtt_ms * 0.3);
+        }
     }
 
     std::cout << "[Protocol] Uploading " << filename << " (" << fileSize << " bytes)\n";

@@ -27,7 +27,7 @@ if [ ! -d "$TEST_FOLDER" ]; then
 fi
 
 # Check if client executable exists
-if [ ! -f "./build/simp_client" ]; then
+if [ ! -f "./build/client_test" ]; then
     echo -e "${RED}Error: Client executable not found. Build first with: cmake --build build${NC}"
     exit 1
 fi
@@ -97,7 +97,7 @@ EOF
         
         # Parse metrics from output
         throughput=$(grep -oP "Throughput:\s+\K[0-9.]+" "$temp_metrics" | tail -1)
-        rtt=$(grep -oP "Average RTT:\s+\K[0-9.]+" "$temp_metrics" | tail -1)
+        rtt=$(grep -oP "RTT:\s+\K[0-9.]+" "$temp_metrics" | tail -1)
         latency=$(grep -oP "Transfer Latency:\s+\K[0-9.]+" "$temp_metrics" | tail -1)
         loss=$(grep -oP "Packet Loss Rate:\s+\K[0-9.]+" "$temp_metrics" | tail -1)
         
@@ -129,7 +129,7 @@ EOF
         
         # Parse metrics from output
         throughput=$(grep -oP "Throughput:\s+\K[0-9.]+" "$temp_metrics" | tail -1)
-        rtt=$(grep -oP "Average RTT:\s+\K[0-9.]+" "$temp_metrics" | tail -1)
+        rtt=$(grep -oP "RTT:\s+\K[0-9.]+" "$temp_metrics" | tail -1)
         latency=$(grep -oP "Transfer Latency:\s+\K[0-9.]+" "$temp_metrics" | tail -1)
         loss=$(grep -oP "Packet Loss Rate:\s+\K[0-9.]+" "$temp_metrics" | tail -1)
         
