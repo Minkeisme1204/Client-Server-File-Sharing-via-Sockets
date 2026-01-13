@@ -11,6 +11,7 @@
 #define CMD_LIST 0x01
 #define CMD_GET  0x02
 #define CMD_PUT  0x03
+#define CMD_PING 0x04
 
 /**
  * @class ServerProtocol
@@ -30,6 +31,7 @@ public:
     bool handleListCommand(int clientFd);
     bool handleGetCommand(int clientFd);
     bool handlePutCommand(int clientFd);
+    bool handlePingCommand(int clientFd);
     bool processRequest(int clientFd);
 
 private:

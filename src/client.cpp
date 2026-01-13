@@ -249,18 +249,43 @@ bool Client::putFile(const std::string& filepath) {
         
         // Log to history
         std::string filename = filepath.substr(filepath.find_last_of("/\\") + 1);
-        metrics_.request_history.emplace_back("PUT", filename, true, fileSize, duration_ms);
+        metrics_.request_history.emplace_back("PUT", filename, true, fileSize, duration_ms, "");
         
-        updateMetrics();
         logOperation("put:" + filepath, true);
         return true;
+        
     } catch (const std::exception& e) {
-        metrics_.failed_requests++;
-        std::string filename = filepath.substr(filepath.find_last_of("/\\") + 1);
-        metrics_.request_history.emplace_back("PUT", filename, false, 0, 0.0, e.what());
         std::cerr << "[Client] Error uploading file: " << e.what() << "\n";
+        metrics_.failed_requests++;
         logOperation("put:" + filepath, false);
         return false;
+    }
+}
+
+double Client::ping() {
+    if (!isConnected()) {
+        std::cerr << "[Client] Not connected to server\n";
+        return 0.0;
+    }
+
+    if (verbose_) {
+        std::cout << "[Client] Sending PING to server...\n";
+    }
+
+    try {
+        double rtt = protocol_->measureRTT();
+        if (rtt > 0) {
+            // Update metrics with new RTT
+            if (metrics_.rtt_ms == 0.0) {
+                metrics_.rtt_ms = rtt;
+            } else {
+                metrics_.rtt_ms = (metrics_.rtt_ms * 0.7) + (rtt * 0.3);
+            }
+        }
+        return rtt;
+    } catch (const std::exception& e) {
+        std::cerr << "[Client] Error pinging server: " << e.what() << "\n";
+        return 0.0;
     }
 }
 

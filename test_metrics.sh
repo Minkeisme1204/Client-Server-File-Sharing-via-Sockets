@@ -4,10 +4,10 @@
 # Tests each file 5 times (GET + PUT) and calculates averages
 
 # Configuration
-TEST_FOLDER="./test_files"
-SERVER_IP="127.0.0.1"
-SERVER_PORT="9000"
-OUTPUT_CSV="metrics_test_$(date +%s).csv"
+TEST_FOLDER="/home/jetsonrobot/Desktop/Client-Server-File-Sharing-via-Sockets/test_file_sizes"
+SERVER_IP="100.113.174.1"
+SERVER_PORT="1212"
+OUTPUT_CSV="/home/jetsonrobot/Desktop/Client-Server-File-Sharing-via-Sockets/metrics_csv/metrics_sizes_test_$(date +%s).csv"
 ITERATIONS=5
 
 # Colors
@@ -33,7 +33,7 @@ if [ ! -f "./build/client_test" ]; then
 fi
 
 # Create CSV header
-echo "STT,File Name,File Size (bytes),Operation,Packets,Throughput (Mbps),RTT (ms),Transfer Latency (ms),Packet Loss Rate (%)" > "$OUTPUT_CSV"
+echo "STT,File Name,File Size (bytes),Operation,Packets,Throughput (kbps),RTT (ms),Transfer Latency (ms),Packet Loss Rate (%)" > "$OUTPUT_CSV"
 
 echo -e "${GREEN}✓ CSV file created: $OUTPUT_CSV${NC}"
 echo -e "${BLUE}Test configuration:${NC}"
@@ -121,9 +121,10 @@ EOF
         download_dir=$(mktemp -d)
         
         # Execute GET command and capture metrics
-        ./build/simp_client "$SERVER_IP" "$SERVER_PORT" << EOF > "$temp_metrics" 2>&1
+        ./build/client_test "$SERVER_IP" "$SERVER_PORT" << EOF > "$temp_metrics" 2>&1
 get $filename $download_dir
 metrics
+ping
 quit
 EOF
         
@@ -159,8 +160,8 @@ EOF
     echo "$((stt+1)),$filename,$filesize,GET,$packets,$avg_get_throughput,$avg_get_rtt,$avg_get_latency,$avg_get_loss" >> "$OUTPUT_CSV"
     
     # Display summary
-    echo -e "${GREEN}✓ PUT: Throughput=${avg_put_throughput} Mbps, RTT=${avg_put_rtt} ms, Latency=${avg_put_latency} ms${NC}"
-    echo -e "${GREEN}✓ GET: Throughput=${avg_get_throughput} Mbps, RTT=${avg_get_rtt} ms, Latency=${avg_get_latency} ms${NC}"
+    echo -e "${GREEN}✓ PUT: Throughput=${avg_put_throughput} kbps, RTT=${avg_put_rtt} ms, Latency=${avg_put_latency} ms${NC}"
+    echo -e "${GREEN}✓ GET: Throughput=${avg_get_throughput} kbps, RTT=${avg_get_rtt} ms, Latency=${avg_get_latency} ms${NC}"
     echo ""
     
     stt=$((stt+2))

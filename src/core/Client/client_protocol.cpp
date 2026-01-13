@@ -10,6 +10,7 @@
 #define CMD_LIST 0x01
 #define CMD_GET  0x02
 #define CMD_PUT  0x03
+#define CMD_PING 0x04
 
 ClientProtocol::ClientProtocol(ClientSocket &socket) 
     : socket_(socket), metrics_(nullptr) {
@@ -17,6 +18,69 @@ ClientProtocol::ClientProtocol(ClientSocket &socket)
 
 void ClientProtocol::setMetrics(ClientMetrics* metrics) {
     metrics_ = metrics;
+}
+
+void ClientProtocol::request_ping() {
+    if (!socket_.isConnected()) {
+        std::cerr << "[Protocol] Not connected to server\n";
+        return;
+    }
+    
+    double rtt_ms = measureRTT();
+    
+    if (rtt_ms > 0) {
+        std::cout << "[Protocol] PING successful: RTT = " << std::fixed 
+                  << std::setprecision(3) << rtt_ms << " ms\n";
+        
+        // Update metrics if available
+        if (metrics_) {
+            if (metrics_->rtt_ms == 0.0) {
+                metrics_->rtt_ms = rtt_ms;
+            } else {
+                metrics_->rtt_ms = (metrics_->rtt_ms * 0.7) + (rtt_ms * 0.3);
+            }
+        }
+    } else {
+        std::cerr << "[Protocol] PING failed\n";
+    }
+}
+
+double ClientProtocol::measureRTT() {
+    if (!socket_.isConnected()) {
+        std::cerr << "[measureRTT] Socket not connected\n";
+        return 0.0;
+    }
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    // Send PING command
+    uint8_t cmd = CMD_PING;
+    std::cout << "[measureRTT] Sending PING command: " << (int)cmd << "\n";
+    if (socket_.sendData(&cmd, sizeof(cmd)) < 0) {
+        std::cerr << "[measureRTT] Failed to send PING\n";
+        return 0.0;
+    }
+    
+    // Receive PONG response
+    uint8_t response = 0;
+    std::cout << "[measureRTT] Waiting for PONG response...\n";
+    ssize_t received = socket_.receiveData(&response, sizeof(response));
+    std::cout << "[measureRTT] Received: " << received << " bytes, response: " << (int)response << "\n";
+    
+    if (received < 0) {
+        std::cerr << "[measureRTT] Failed to receive PONG\n";
+        return 0.0;
+    }
+    
+    if (response != CMD_PING) {
+        std::cerr << "[measureRTT] Invalid PONG response: " << (int)response << " (expected " << (int)CMD_PING << ")\n";
+        return 0.0;
+    }
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    std::cout << "[measureRTT] RTT: " << (duration.count() / 1000.0) << " ms\n";
+    return duration.count() / 1000.0;  // Convert to milliseconds
 }
 
 void ClientProtocol::request_list() {
@@ -117,9 +181,6 @@ bool ClientProtocol::request_get(const std::string &filename, const std::string 
         return false;
     }
 
-    // Measure RTT: time from sending command to receiving first response
-    auto rttStart = std::chrono::high_resolution_clock::now();
-    
     // Send GET command
     uint8_t cmd = CMD_GET;
     if (socket_.sendData(&cmd, sizeof(cmd)) < 0) {
@@ -140,20 +201,6 @@ bool ClientProtocol::request_get(const std::string &filename, const std::string 
     if (socket_.receiveData(reinterpret_cast<uint8_t*>(&fileSize), sizeof(fileSize)) < 0) {
         std::cerr << "[Protocol] Failed to receive file size\n";
         return false;
-    }
-    
-    // Calculate and update RTT
-    auto rttEnd = std::chrono::high_resolution_clock::now();
-    auto rttDuration = std::chrono::duration_cast<std::chrono::microseconds>(rttEnd - rttStart);
-    double rtt_ms = rttDuration.count() / 1000.0;
-    
-    if (metrics_) {
-        // Exponential moving average: 70% old + 30% new
-        if (metrics_->rtt_ms == 0.0) {
-            metrics_->rtt_ms = rtt_ms;
-        } else {
-            metrics_->rtt_ms = (metrics_->rtt_ms * 0.7) + (rtt_ms * 0.3);
-        }
     }
 
     if (fileSize == 0) {
@@ -240,11 +287,9 @@ bool ClientProtocol::request_get(const std::string &filename, const std::string 
         std::cout << "[Protocol DEBUG] Updated total_transfer_time_ms: " 
                   << metrics_->total_transfer_time_ms.load() << " ms" << std::endl;
         
-        // Calculate average throughput across all transfers
-        uint64_t total_time = metrics_->total_transfer_time_ms.load();
-        if (total_time > 0) {
-            uint64_t total_bytes = metrics_->total_bytes_sent.load() + metrics_->total_bytes_received.load();
-            metrics_->throughput_kbps = (total_bytes * 8.0) / total_time;
+        // Calculate throughput for GET (download only)
+        if (duration_ms > 0) {
+            metrics_->throughput_kbps = (fileSize * 8.0) / duration_ms;
         }
     } else {
         std::cout << "[Protocol DEBUG] metrics_ is NULL - cannot update!" << std::endl;
@@ -278,9 +323,6 @@ bool ClientProtocol::request_put(const std::string &filepath) {
         return false;
     }
 
-    // Measure RTT: time to send command and metadata (server processing time)
-    auto rttStart = std::chrono::high_resolution_clock::now();
-    
     // Send PUT command
     uint8_t cmd = CMD_PUT;
     if (socket_.sendData(&cmd, sizeof(cmd)) < 0) {
@@ -300,20 +342,6 @@ bool ClientProtocol::request_put(const std::string &filepath) {
     if (socket_.sendData(reinterpret_cast<uint8_t*>(&fileSize), sizeof(fileSize)) < 0) {
         std::cerr << "[Protocol] Failed to send file size\n";
         return false;
-    }
-    
-    // RTT measured: command sent, server ready to receive
-    auto rttEnd = std::chrono::high_resolution_clock::now();
-    auto rttDuration = std::chrono::duration_cast<std::chrono::microseconds>(rttEnd - rttStart);
-    double rtt_ms = rttDuration.count() / 1000.0;
-    
-    if (metrics_) {
-        // Exponential moving average: 70% old + 30% new
-        if (metrics_->rtt_ms == 0.0) {
-            metrics_->rtt_ms = rtt_ms;
-        } else {
-            metrics_->rtt_ms = (metrics_->rtt_ms * 0.7) + (rtt_ms * 0.3);
-        }
     }
 
     std::cout << "[Protocol] Uploading " << filename << " (" << fileSize << " bytes)\n";
@@ -380,11 +408,9 @@ bool ClientProtocol::request_put(const std::string &filepath) {
         metrics_->total_bytes_sent += fileSize;  // Uploaded bytes
         metrics_->total_transfer_time_ms += duration_ms;
         
-        // Calculate average throughput across all transfers
-        uint64_t total_time = metrics_->total_transfer_time_ms.load();
-        if (total_time > 0) {
-            uint64_t total_bytes = metrics_->total_bytes_sent.load() + metrics_->total_bytes_received.load();
-            metrics_->throughput_kbps = (total_bytes * 8.0) / total_time;
+        // Calculate throughput for PUT (upload only)
+        if (duration_ms > 0) {
+            metrics_->throughput_kbps = (fileSize * 8.0) / duration_ms;
         }
     }
     return true;

@@ -74,6 +74,12 @@ public:
      */
     bool putFile(const std::string& filepath);
 
+    /**
+     * @brief Send PING to server to measure RTT
+     * @return RTT in milliseconds, or 0.0 on failure
+     */
+    double ping();
+
     // Metrics and Statistics
     /**
      * @brief Get current client metrics

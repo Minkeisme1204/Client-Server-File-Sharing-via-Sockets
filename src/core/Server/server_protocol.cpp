@@ -60,6 +60,9 @@ bool ServerProtocol::processRequest(int clientFd) {
         case CMD_PUT:
             result = handlePutCommand(clientFd);
             break;
+        case CMD_PING:
+            result = handlePingCommand(clientFd);
+            break;
         default:
             std::cerr << "[Protocol] Unknown command: " << (int)cmd << "\n";
             return false;
@@ -99,6 +102,19 @@ bool ServerProtocol::handleListCommand(int clientFd) {
     }
 
     std::cout << "[Protocol] Sent " << fileCount << " files\n";
+    return true;
+}
+
+bool ServerProtocol::handlePingCommand(int clientFd) {
+    std::cout << "[Protocol] Processing PING command\n";
+    // Respond immediately with PONG (echo back CMD_PING)
+    uint64_t response = CMD_PING;
+    std::cout << "[Protocol] Sending PONG: " << (int)response << "\n";
+    if (ServerSocket::sendData(clientFd, &response, sizeof(response)) < 0) {
+        std::cerr << "[Protocol] Failed to send PONG\n";
+        return false;
+    }
+    std::cout << "[Protocol] PONG sent successfully\n";
     return true;
 }
 

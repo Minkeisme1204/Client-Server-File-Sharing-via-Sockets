@@ -18,6 +18,8 @@ public:
     bool request_get(const std::string &filename, 
                      const std::string &save_dir); 
     bool request_put(const std::string &filepath);
+    void request_ping();
+    double measureRTT();
 
 private: 
     ClientSocket &socket_;
