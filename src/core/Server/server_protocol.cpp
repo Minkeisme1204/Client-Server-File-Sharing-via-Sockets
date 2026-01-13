@@ -108,7 +108,7 @@ bool ServerProtocol::handleListCommand(int clientFd) {
 bool ServerProtocol::handlePingCommand(int clientFd) {
     std::cout << "[Protocol] Processing PING command\n";
     // Respond immediately with PONG (echo back CMD_PING)
-    uint64_t response = CMD_PING;
+    uint8_t response = CMD_PING;
     std::cout << "[Protocol] Sending PONG: " << (int)response << "\n";
     if (ServerSocket::sendData(clientFd, &response, sizeof(response)) < 0) {
         std::cerr << "[Protocol] Failed to send PONG\n";

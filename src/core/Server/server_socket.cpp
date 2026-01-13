@@ -34,6 +34,14 @@ bool ServerSocket::bind(uint16_t port, int backlog) {
         return false;
     }
 
+    // Set SO_REUSEPORT to allow immediate rebinding even if in TIME_WAIT
+    #ifdef SO_REUSEPORT
+    if (setsockopt(socketFd_, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
+        std::cerr << "[ServerSocket] Warning: Failed to set SO_REUSEPORT: " << strerror(errno) << "\n";
+        // Continue anyway, SO_REUSEADDR might be enough
+    }
+    #endif
+
     // Setup server address
     struct sockaddr_in serverAddr;
     std::memset(&serverAddr, 0, sizeof(serverAddr));
